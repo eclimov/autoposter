@@ -1,0 +1,8 @@
+1. Open folder in command line (shift + right click on containing folder)
+2. Run the script:
+C:\Python\Python35-32\Scripts\pyinstaller -w -F -i "assets\icon.ico" Autoposter.py
+(
+	-w - without console
+	-F - in one exe file
+	-i - with custom icon
+)

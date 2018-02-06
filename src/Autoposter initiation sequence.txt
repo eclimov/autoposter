@@ -1,0 +1,38 @@
+These steps are useful for case, when there are 3 selections of artworks:
+- Recently used
+- Used
+- Unused
+
+1. Copy "C:\Users\Edik\Desktop\imagestemp\new" 
+to 
+"C:\Users\Edik\PycharmProjects\VkAutoposter\src\projects\{project_name}\images_new"
+
+2. Run application to fill the DB with existing artworks
+
+3. Run SQL: //Create doubled fake activity for the artworks
+INSERT INTO activity_log(artwork_id) 
+SELECT id FROM {project_name}
+INSERT INTO activity_log(artwork_id) 
+SELECT id FROM {project_name}
+
+4. Copy "C:\Users\Edik\Desktop\imagestemp\{except 'new'}" 
+to 
+"C:\Users\Edik\PycharmProjects\VkAutoposter\src\projects\{project_name}\images_new"
+
+5. Run application to fill the DB with existing artworks
+
+6. Run SQL: //Create fake activity for these new artworks
+INSERT INTO activity_log(artwork_id) 
+SELECT {project_name}.id FROM {project_name}
+LEFT JOIN activity_log ON {project_name}.id = activity_log.artwork_id
+WHERE activity_log.id IS NULL
+
+7. Copy "C:\Users\Edik\Desktop\{project_name}_unused" 
+to 
+"C:\Users\Edik\PycharmProjects\VkAutoposter\src\projects\{project_name}\images_new"
+
+8. Add all necessary tags to the artworks from step7
+
+9. Run application to fill the DB with existing artworks
+
+10. Now you can use the application normally
