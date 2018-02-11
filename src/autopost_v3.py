@@ -487,7 +487,7 @@ class Autopost:
         if n < 1:
             raise Exception("behaviour not defined for n<1")
         if n == 1:
-            return [start]
+            return [end]
         step = (end - start) / float(n - 1)
         return [int(round(start + x * step)) for x in range(n)]
 
