@@ -1,6 +1,8 @@
 from os import listdir, remove, path, makedirs
 from os.path import isfile, join
 import shutil
+import string
+import random
 
 
 def get_image_list(path):
@@ -44,3 +46,42 @@ def create_folder(folder_path):
         makedirs(folder_path)
         return True
     return False
+
+# Returns dictionary{'name', 'tags', 'extension'}
+def parse_image_name(image_full_name):
+    image_name_with_tags = image_full_name.split('.')[0]
+    image_name = image_name_with_tags.split(',')[0]
+    image_extension = image_full_name.split('.')[-1]  # Last element of "split()" result
+    image_tags = image_name_with_tags.split(',')
+    del image_tags[0]
+    return {'name': image_name, 'tags': image_tags, 'extension': image_extension}
+
+def is_valid_name(name, size):
+    if len(name) != size:
+        return False
+    for i in name:
+        if not i.isalnum() or not i.isupper():
+            return False
+    return True
+
+def generate_alphanumeric(size, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
+def isEnglish(s):
+    try:
+        s.encode(encoding='utf-8').decode('ascii')
+    except UnicodeDecodeError:
+        return False
+    else:
+        return True
+
+
+# Get certain number of values values, distributed within given range
+# returns [a1, a2, a3, a4, ... , an]
+def distribution(start, end, n):
+    if n < 1:
+        raise Exception("behaviour not defined for n<1")
+    if n == 1:
+        return [end]
+    step = (end - start) / float(n - 1)
+    return [int(round(start + x * step)) for x in range(n)]

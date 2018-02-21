@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import base64
-import io
 import pickle
 import webbrowser
 from urllib.parse import parse_qs
@@ -10,9 +8,8 @@ import time
 import requests
 import json
 from time import sleep
-import file_control
+from file_control import *
 import database
-import string
 import random
 
 class Autopost:
@@ -35,9 +32,9 @@ class Autopost:
 
         # Create folder structure
         print("Checking folder structure...")
-        if file_control.create_folder(self.__img_folder_path_new):
+        if create_folder(self.__img_folder_path_new):
             print("Directory created: '" + self.__img_folder_path_new + "'")
-        if file_control.create_folder(self.__img_folder_path_working):
+        if create_folder(self.__img_folder_path_working):
             print("Directory created: '" + self.__img_folder_path_working + "'")
         print("Folder structure checked.\n")
 
@@ -116,10 +113,10 @@ class Autopost:
 
 
     def refresh_old_images(self):
-        old_images_list = file_control.get_image_list(self.__img_folder_path_working)
+        old_images_list = get_image_list(self.__img_folder_path_working)
         ids_updated = []
         for old_image in old_images_list:
-            image = self.parse_image_name(old_image)
+            image = parse_image_name(old_image)
             image_name = image['name'] + '.' + image['extension']
             image_tags_string = ",".join(image['tags'])
             # Checking if image exists in DB
@@ -146,27 +143,27 @@ class Autopost:
 
 
     def refresh_new_images(self):
-        new_images_list = file_control.get_image_list(self.__img_folder_path_new)
+        new_images_list = get_image_list(self.__img_folder_path_new)
         for new_image in new_images_list:
-            image = self.parse_image_name(new_image)
-            if not self.is_valid_name(name=image['name'],size=4) or not self.image_exists_in_db(name=image['name']):
+            image = parse_image_name(new_image)
+            if not is_valid_name(name=image['name'],size=4) or not self.image_exists_in_db(name=image['name']):
                 image['name'] = self.generate_image_name(size=4)
             image_tags_string = ",".join(image['tags'])
             db_image_name = image['name'] + '.' + image['extension']
             disk_image_name = image['name'] + ("," + image_tags_string if image_tags_string.strip()!='' else '') + '.' + image['extension']
-            file_control.rename_img(self.__img_folder_path_new, new_image, disk_image_name)
+            rename_img(self.__img_folder_path_new, new_image, disk_image_name)
             sql = "INSERT INTO " + self.__project_name + "(name,tags) VALUES ('" + db_image_name + "','" + image_tags_string + "')"
             cursor = self.__db.execute(sql)
             print("Row inserted in DB: id=" + str(cursor.lastrowid))
-            file_control.move_img(self.__img_folder_path_new, self.__img_folder_path_working, disk_image_name)
+            move_img(self.__img_folder_path_new, self.__img_folder_path_working, disk_image_name)
 
 
     def db_cleanup(self):
-        working_images_list = file_control.get_image_list(self.__img_folder_path_working)
+        working_images_list = get_image_list(self.__img_folder_path_working)
         working_images_list_sql_string = ''
         is_first = True
         for working_image in working_images_list:
-            image = self.parse_image_name(working_image)
+            image = parse_image_name(working_image)
             image_name = image['name'] + "." + image['extension']
             if is_first == False:
                 working_images_list_sql_string += ",'" + image_name + "'"
@@ -178,16 +175,6 @@ class Autopost:
         if cursor.rowcount:
             print("Database cleaned. Rows deleted: " + str(cursor.rowcount))
 
-
-    # Returns dictionary{'name', 'tags', 'extension'}
-    def parse_image_name(self, image_full_name):
-        image_name_with_tags = image_full_name.split('.')[0]
-        image_name = image_name_with_tags.split(',')[0]
-        image_extension = image_full_name.split('.')[-1]  # Last element of "split()" result
-        image_tags = image_name_with_tags.split(',')
-        del image_tags[0]
-        return {'name': image_name, 'tags': image_tags, 'extension': image_extension}
-
     def image_exists_in_db(self, name):
         sql = "SELECT id FROM " + self.__project_name + " WHERE name = '" + name + "'"
         cursor = self.__db.execute(sql)
@@ -196,25 +183,14 @@ class Autopost:
             return False
         return True
 
-    def is_valid_name(self, name, size):
-        if len(name) != size:
-            return False
-        for i in name:
-            if not i.isalnum() or not i.isupper():
-                return False
-        return True
-
     def generate_image_name(self,size):
         while True:
-            random_value = self.generate_alphanumeric(size)
+            random_value = generate_alphanumeric(size)
             sql = "SELECT id FROM "+self.__project_name+" WHERE name LIKE '"+random_value+"%'"
             cursor = self.__db.execute(sql)
             recordCount = len(cursor.fetchall())
             if recordCount == 0:
                 return random_value
-
-    def generate_alphanumeric(self, size, chars=string.ascii_uppercase + string.digits):
-        return ''.join(random.choice(chars) for _ in range(size))
 
 
     def get_auth_params(self):
@@ -358,7 +334,7 @@ class Autopost:
         total_starting_point = self.get_datetime_starting_point()
         for x in range(days_number):
             daily_starting_point = total_starting_point + timedelta(days=x)  # Starting datetime point
-            minutes_diff_distribution = self.distribution(1,600,perDay) # numbers in minutes, relatively to starting point
+            minutes_diff_distribution = distribution(1,600,perDay) # numbers in minutes, relatively to starting point
             for minuteAdd in minutes_diff_distribution:
                 datetime_to_post = daily_starting_point + timedelta(minutes=minuteAdd+random.randint(1, 20))
                 datetime_to_post_string = datetime_to_post.strftime("%Y-%m-%d %H:%M:%S")
@@ -429,13 +405,6 @@ class Autopost:
         else:
             return False
 
-    def isEnglish(self,s):
-        try:
-            s.encode(encoding='utf-8').decode('ascii')
-        except UnicodeDecodeError:
-            return False
-        else:
-            return True
 
     def delete_all_planned_posts(self):  # Deleting all planned posts, based on post_id from DB
         response = {}
@@ -469,7 +438,7 @@ class Autopost:
             return True
         # if post_id = 0, deleting all posts, according to the filter
         else:
-            number_of_posts_to_be_deleted = self.get_posts(filter)["count"]
+            #number_of_posts_to_be_deleted = self.get_posts(filter)["count"]
             #print(str(number_of_posts_to_be_deleted) + " posts are going to be deleted")
             while len(self.get_posts(filter)["items"]) > 0: #Looping until all posts deleted, because maximum is 20 posts
                 posts = self.get_posts(filter)["items"]
@@ -480,16 +449,6 @@ class Autopost:
                         print("post "+str(post["id"])+" deleted")
                         return True
 
-
-    # Get certain number of values values, distributed within given range
-    # returns [a1, a2, a3, a4, ... , an]
-    def distribution(self, start, end, n):
-        if n < 1:
-            raise Exception("behaviour not defined for n<1")
-        if n == 1:
-            return [end]
-        step = (end - start) / float(n - 1)
-        return [int(round(start + x * step)) for x in range(n)]
 
     def create_data_activity_log(self, insert=None):
         if insert:
@@ -652,9 +611,9 @@ class Autopost:
                     activity_log_args['artwork_id'] = [str(post['image']['id'])]
                     try:
                         if post['image']['extension'].find('.gif') == -1:
-                            if not self.isEnglish(post['image']['image_path']):
+                            if not isEnglish(post['image']['image_path']):
                                 image_temp_name = "temp." + post['image']['extension']
-                                file_control.copy_img1(
+                                copy_img1(
                                     img_path_old=post['image']['image_path'],
                                     img_path_new=self.__img_folder_path_working + '/' + image_temp_name
                                 )
@@ -715,8 +674,8 @@ class Autopost:
                     self.create_data_activity_log(activity_log_args)
 
             if 'image' in post and post['image'] != '':
-                if not self.isEnglish(post['image']['image_path']):
-                    file_control.delete_file(self.__img_folder_path_working + '/' + "temp." + post['image']['extension'])
+                if not isEnglish(post['image']['image_path']):
+                    delete_file(self.__img_folder_path_working + '/' + "temp." + post['image']['extension'])
 
             yield return_data
 
