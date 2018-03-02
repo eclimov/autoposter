@@ -87,7 +87,7 @@ class Autopost:
         return self.__group_id
 
     def get_group_info_by_id(self, id):
-        method_url = 'https://api.vk.com/method/groups.getById?'
+        method_url = 'https://api.vk.com/method/groups.getById?v=5.73'
         data = dict(group_id=id) #It is possible to get private info, if passing other params. See documentation
         response = requests.post(method_url, data)
         result = json.loads(response.text)
@@ -96,7 +96,7 @@ class Autopost:
     def get_group_avatar(self):
         avatar_url = self.get_group_info_by_id(
             self.get_group_id()
-        )[0]['photo_big']
+        )[0]['photo_200']
         avatar_path = self.__project_root_path+'/avatar.jpg'
         f = open(avatar_path, 'wb')
         f.write(requests.get(avatar_url).content)
@@ -222,7 +222,7 @@ class Autopost:
                         "&redirect_uri=https://oauth.vk.com/blank.html"
                         "&scope=notify,friends,photos,audio,video,docs,notes,pages,status,offers,questions,wall,groups,messages,notifications,stats,ads,offline"
                         "&client_secret={app_secret_key}"
-                        "&display=popup&response_type=token&v=5.60".format(app_id=self.__app_id,app_app_secret_key=self.__app_secret_key))
+                        "&display=popup&response_type=token&v=5.73".format(app_id=self.__app_id,app_app_secret_key=self.__app_secret_key))
             webbrowser.open_new_tab(auth_url)
             redirected_url = input("Paste here url you were redirected:\n")
             aup = parse_qs(redirected_url)
@@ -266,14 +266,14 @@ class Autopost:
     def get_posts(self, filter = "all", offset=0):
         owner_id = str(-int(self.__group_id))
         domain = "public" + self.__group_id
-        v = 5.58
+        v = '5.73'
         if offset == (-1): # Offset should be positive
             offset = 0
         return self.__api.wall.get(owner_id=owner_id, domain=domain, filter=filter, extended=1, offset=offset, v=v)
 
 
-    def get_upload_image_link(self, img):
-        method_url = 'https://api.vk.com/method/photos.getWallUploadServer?'
+    def get_upload_image_link(self):
+        method_url = 'https://api.vk.com/method/photos.getWallUploadServer?v=5.73'
         data = dict(access_token=self.__access_token, gid=self.__group_id)
         response = requests.post(method_url, data)
         result = json.loads(response.text)
@@ -282,17 +282,19 @@ class Autopost:
 
 
     def upload_image(self, upload_url, img):
-        response = requests.post(upload_url, files=img)
+        response = requests.post(upload_url+'&v=5.73', files=img)
         result = json.loads(response.text)
         return result
 
 
     def save_image_on_server(self, result):
-        method_url = 'https://api.vk.com/method/photos.saveWallPhoto?'
+        method_url = 'https://api.vk.com/method/photos.saveWallPhoto?v=5.73'
         data = dict(access_token=self.__access_token, gid=self.__group_id, photo=result['photo'], hash=result['hash'],
                     server=result['server'])
         response = requests.post(method_url, data)
-        result = json.loads(response.text)['response'][0]['id']
+        #result = json.loads(response.text)['response'][0]['id']
+        res = json.loads(response.text)['response'][0]
+        result = 'photo'+str(res['owner_id'])+'_'+str(res['id']) #'attachments' string in format "<type><owner_id>_<media_id>"
         return result
 
 
@@ -434,7 +436,7 @@ class Autopost:
     def delete_posts(self, post_id = 0, filter = "postponed"):
         owner_id = str(-int(self.__group_id))
         if post_id:
-            self.__api.wall.delete(owner_id=owner_id, post_id=post_id)
+            self.__api.wall.delete(owner_id=owner_id, post_id=post_id, v='5.73')
             return True
         # if post_id = 0, deleting all posts, according to the filter
         else:
@@ -444,7 +446,7 @@ class Autopost:
                 posts = self.get_posts(filter)["items"]
                 for post in posts:
                     sleep(0.4)  # Time in seconds. Max: 3/sec
-                    response = self.__api.wall.delete(owner_id=owner_id, post_id=post["id"])
+                    response = self.__api.wall.delete(owner_id=owner_id, post_id=post["id"], v='5.73')
                     if response == 1:
                         print("post "+str(post["id"])+" deleted")
                         return True
@@ -568,7 +570,7 @@ class Autopost:
                                     video = self.__api.video.get(
                                         owner_id=-int(self.__group_id),
                                         videos=str(attachment['video']['owner_id'])+'_'+str(attachment['video']['id'])+'_'+str(attachment['video']['access_key']),
-                                        v=5.58
+                                        v='5.73'
                                     )
                                     suggested_post['text'] = video['items'][0]['player'] #The first video(if many) is enough
                         post['vk_args']['attachments'] = ','.join(vk_attachments)
@@ -624,12 +626,13 @@ class Autopost:
                                 with open(img_path, 'rb') as file:
                                     img = {'photo': (img_path, file)}
                                     # Получаем ссылку для загрузки изображений
-                                    upload_url = self.get_upload_image_link(img)
+                                    upload_url = self.get_upload_image_link()
                                     # Загружаем изображение на url
                                     result = self.upload_image(upload_url, img)
                                     # Сохраняем фото на сервере и получаем id
                                     result = self.save_image_on_server(result)
-                                    post['vk_args']['attachment'] = result
+                                    post['vk_args']['attachments'] = result
+
                             if post['telegram_args']:
                                 post['telegram_args']['image_path'] = img_path
                         else:
@@ -641,6 +644,7 @@ class Autopost:
 
             return_data = {}
             if post['vk_args']:
+                post['vk_args']['v'] = '5.60'
                 post_id = (self.__api.wall.post(**post['vk_args']))['post_id']  # post_id
                 activity_log_args['vk_post_id'] = str(post_id)
                 if post['telegram_args'] and (is_instant and 'with_vk_link' in instant and instant['with_vk_link'] == 1): #Is customized instant
