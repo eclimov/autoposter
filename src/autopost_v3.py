@@ -312,7 +312,7 @@ class Autopost:
             FROM
                 activity_log 
             WHERE
-                post_dste > DateTime('now', 'localtime') 
+                post_date > DateTime('now', 'localtime')
                 AND
                 vk_post_id IS NOT NULL
         """
@@ -455,7 +455,7 @@ class Autopost:
                     SELECT
                         artwork_id,
                         COUNT(*) AS used_times,
-                        MAX(post_date) AS when_last_used,
+                        MAX(post_date) AS when_last_used
                     FROM 
                         """ + activity_log_table + """
                     GROUP BY
