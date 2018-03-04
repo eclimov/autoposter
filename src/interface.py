@@ -6,6 +6,7 @@ import autopost_v3 as autopost
 import threading
 import sys
 
+
 def resize_image(image, width, height, keep_ratio=1):
     if keep_ratio:
         img_w, img_h = image.size
@@ -19,24 +20,58 @@ def resize_image(image, width, height, keep_ratio=1):
 class App(tk.Tk):
     def __init__(self, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
-        self.wm_attributes("-topmost", 0) #Set to 1 for topmost positioning
+        self.wm_attributes("-topmost", 0)  # Set to 1 for topmost positioning
         self.resizable(False, False)
         self.title('Autoposter')
         self.configure(bg='white')
 
         self.projects = {}
         self.__db = database.Database('structure.db')
-        sql = "SELECT " \
-                  "projects.name AS project_name, " \
-                  "vk_groups.application_id, " \
-                  "vk_groups.application_secret_key, " \
-                  "vk_groups.group_id " \
-              "FROM projects " \
-              "INNER JOIN vk_groups ON projects.id = vk_groups.project_id"
+        # Initialize table with the list of projects
+        sql_init_projects = """
+            CREATE TABLE IF NOT EXISTS projects (
+                id      INTEGER PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
+                name    VARCHAR(40) NOT NULL
+            );
+        """
+        self.__db.execute(sql_init_projects)
+
+        sql_init_vk_groups = """
+            CREATE TABLE IF NOT EXISTS vk_groups (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                application_id          VARCHAR(40) NOT NULL,
+                application_secret_key  VARCHAR(200) NOT NULL,
+                group_id                VARCHAR(40) NOT NULL,
+                project_id              INTEGER
+            );
+        """
+        self.__db.execute(sql_init_vk_groups)
+
+        sql_init_telegram_groups = """
+            CREATE TABLE IF NOT EXISTS telegram_groups (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                chat_id    VARCHAR(200),
+                bot_token  VARCHAR(200),
+                project_id INTEGER
+            );
+        """
+        self.__db.execute(sql_init_telegram_groups)
+
+        sql = """
+            SELECT
+                projects.name AS project_name,
+                vk_groups.application_id,
+                vk_groups.application_secret_key,
+                vk_groups.group_id
+            FROM
+                projects
+            INNER JOIN vk_groups
+                ON projects.id = vk_groups.project_id
+        """
         cursor = self.__db.execute(sql)
         rows = cursor.fetchall()
         if len(rows) == 0:
-            warning_label = tk.Label(self, text="No projects found in database",font="Arial 13")
+            warning_label = tk.Label(self, text="No projects found in database", font="Arial 13")
             warning_label.pack()
             return
         for row in rows:
@@ -61,12 +96,26 @@ class App(tk.Tk):
 
         self.buttonbar = tk.Frame(self.bottom_frame)
         self.buttonbar.pack(side="right", expand=False)
-        button_quit = tk.Button(self.buttonbar, bg="gray", text='Quit', font="Arial 14 bold", height=1, command=self.quit)
+        button_quit = tk.Button(
+            self.buttonbar,
+            bg="gray",
+            text='Quit',
+            font="Arial 14 bold",
+            height=1,
+            command=self.quit
+        )
         button_quit.pack(side="right", padx=10, pady=10)
-        self.button_post = tk.Button(self.buttonbar, bg="#88ce46", text='Post', font="Arial 14 bold", height=1, command=self.post)
+        self.button_post = tk.Button(
+            self.buttonbar,
+            bg="#88ce46",
+            text='Post',
+            font="Arial 14 bold",
+            height=1,
+            command=self.post
+        )
         self.button_post.pack(side="right", pady=10)
 
-        #TODO: allow choosing "signed" value
+        # TODO: allow choosing "signed" value
         '''
         self.signed_frame = tk.LabelFrame(self, text="Signed", bg="white")
         self.signed_frame.pack(side="bottom", anchor="w", padx="4", pady="4", expand=False)
@@ -91,24 +140,23 @@ class App(tk.Tk):
         )
         self.status_info_label.pack(side="right", pady=10)
 
-        self.button_scheduled = tk.Button(self.toolbar, text="Scheduled", command=self.tabScheduled)
-        self.button_instant = tk.Button(self.toolbar, text="Instant", command=self.tabInstant)
+        self.button_scheduled = tk.Button(self.toolbar, text="Scheduled", command=self.tab_scheduled)
+        self.button_instant = tk.Button(self.toolbar, text="Instant", command=self.tab_instant)
         self.button_scheduled.pack(side="left")
         self.button_instant.pack(side="left")
 
         self.total_suggested = 0
         self.post_type = 1  # 1 - scheduled, 2- instant
-        self.tabScheduled()
-
+        self.tab_scheduled()
 
     def quit(self):
         sys.exit()
-
 
     def project_init(self, project_name):
         self.__project_name = project_name
 
         self.status_info_label.config(text="Loading...", fg="black")
+
         def callback():
             self.button_post.config(state="disabled")
             self.button_scheduled.config(state="disabled")
@@ -129,7 +177,9 @@ class App(tk.Tk):
                 self.total_planned_posts = len(planned_posts)
                 self.total_posts_label.config(text="Auto-planned posts: " + str(self.total_planned_posts))
                 if self.total_planned_posts:
-                    self.last_post.config(text="Last planned post date: " + str(planned_posts[len(planned_posts)-1]['post_date']))
+                    self.last_post.config(
+                        text="Last planned post date: " + str(planned_posts[len(planned_posts)-1]['post_date'])
+                    )
                 else:
                     self.last_post.config(
                         text="Last planned post date: -"
@@ -145,7 +195,7 @@ class App(tk.Tk):
                 telegram_post_count = int(self.post_difference['telegram_post_count'])
                 self.telegram_checkbox.config(text="Telegram(" + str(telegram_post_count) + ')')
 
-                self.total_suggested = self.controller.get_posts(filter="suggests")['count']
+                self.total_suggested = self.controller.get_posts(search_filter="suggests")['count']
                 self.suggested_checkbox.config(
                     text="Post suggested("+str(self.total_suggested)+")",
                     state="normal" if self.total_suggested else "disabled"
@@ -164,12 +214,10 @@ class App(tk.Tk):
         t = threading.Thread(target=callback)
         t.start()
 
-
-    def choose_project(self,name, index, mode):
+    def choose_project(self, name, index, mode):
         # print("callback called with name=%r, index=%r, mode=%r" % (name,index, mode))
         selected_value = self.getvar(name)
         self.project_init(selected_value)
-
 
     def confirm(self, text):
         delete = messagebox.askquestion("Confirm", text, icon='warning')
@@ -182,15 +230,16 @@ class App(tk.Tk):
         if grayscale:
             img = img.convert(mode='LA')
         img = resize_image(img, 256, 256)
-        tkImage = ImageTk.PhotoImage(img)
-        self.panel.configure(image=tkImage)
-        self.panel.image = tkImage
+        tk_image = ImageTk.PhotoImage(img)
+        self.panel.configure(image=tk_image)
+        self.panel.image = tk_image
 
-
-    def deleteAllPlanned(self):
+    def delete_all_planned(self):
         delete = False
         if self.total_planned_posts:
-            delete = self.confirm("You are going to delete "+str(self.total_planned_posts)+" planned posts. Are You Sure?")
+            delete = self.confirm(
+                "You are going to delete "+str(self.total_planned_posts)+" planned posts. Are You Sure?"
+            )
         if delete:
             def callback():
                 self.button_post.config(state="disabled")
@@ -211,9 +260,8 @@ class App(tk.Tk):
             t = threading.Thread(target=callback)
             t.start()
 
-
     def post(self):
-        if self.post_type == 1: #Scheduled
+        if self.post_type == 1:  # Scheduled
             days_number = self.number_of_days_scale.get()
             per_day = self.posts_per_day_scale.get()
 
@@ -227,7 +275,8 @@ class App(tk.Tk):
             def callback():
                 self.button_delete_all_planned.config(state="disabled")
                 self.button_post.config(state="disabled")
-                for post in self.controller.add_posts(scheduled = {'per_day': per_day, 'days_number': days_number}):  # Maximum posts to be scheduled: 150
+                # Maximum posts to be scheduled: 150
+                for post in self.controller.add_posts(scheduled={'per_day': per_day, 'days_number': days_number}):
                     self.set_preview_image(post['image_path'])
                     self.last_post.config(text="Last planned post date: "+post['datetime_string'])
                     self.total_planned_posts += 1
@@ -240,7 +289,7 @@ class App(tk.Tk):
                 self.button_delete_all_planned.config(state="normal")
             t = threading.Thread(target=callback)
             t.start()
-        elif self.post_type == 2: #Instant
+        elif self.post_type == 2:  # Instant
             checkbox_vk = 1
             if not self.vk_var.get() or self.vk_checkbox['state'] == 'disabled':
                 checkbox_vk = 0
@@ -268,7 +317,8 @@ class App(tk.Tk):
                 vk_args['instant']['auto_image'] = 1
             text = ''
             if input_text:
-                text = (self.text_input.get("1.0", 'end-1c')).strip() # 'get()' of 'Text' must have 'start' and 'end' arguments
+                # 'get()' of 'Text' must have 'start' and 'end' arguments
+                text = (self.text_input.get("1.0", 'end-1c')).strip()
             if text != '':
                 vk_args['instant']['message'] = text
             if checkbox_auto_tags:
@@ -303,9 +353,8 @@ class App(tk.Tk):
             t = threading.Thread(target=callback)
             t.start()
 
-
     def disable_checkboxes(self, name='', index='', mode=''):
-        #print("callback called with name=%r, index=%r, mode=%r" % (name,index, mode))
+        # print("callback called with name=%r, index=%r, mode=%r" % (name,index, mode))
         checkbox_vk = 1
         if not self.vk_var.get() or self.vk_checkbox['state'] == 'disabled':
             checkbox_vk = 0
@@ -341,14 +390,18 @@ class App(tk.Tk):
             self.tags_forms[i].config(state="normal" if input_tags_state else "disabled")
         self.telegram_vk_link_checkbox.config(state="normal" if checkbox_telegram_link_state else "disabled")
         self.attachment_checkbox.config(state="normal" if checkbox_auto_image_state else "disabled")
-        self.suggested_checkbox.config(state="normal" if checkbox_suggested_state and self.total_suggested else "disabled")
-        self.text_input.config(state="normal" if input_text_state else "disabled", bg="white" if input_text_state else "#c1c1c1")
+        self.suggested_checkbox.config(
+            state="normal" if checkbox_suggested_state and self.total_suggested else "disabled"
+        )
+        self.text_input.config(
+            state="normal" if input_text_state else "disabled", bg="white" if input_text_state else "#c1c1c1"
+        )
 
-
-    def tabScheduled(self):
+    def tab_scheduled(self):
         try:
             self.forms_frame.destroy()
-        except:
+        except Exception as e:
+            print('*' + str(e) + '*')
             pass
         self.post_type = 1
         self.forms_frame = tk.Frame(self, borderwidth=2, relief="groove")
@@ -358,7 +411,13 @@ class App(tk.Tk):
         forms.append(frame_info)
         forms[-1].grid(column=0, row=0, padx=4, pady=2, sticky="ew")
 
-        self.button_delete_all_planned = tk.Button(frame_info, bg="#ff7777", text='Delete all', font="Arial 6", command=self.deleteAllPlanned)
+        self.button_delete_all_planned = tk.Button(
+            frame_info,
+            bg="#ff7777",
+            text='Delete all',
+            font="Arial 6",
+            command=self.delete_all_planned
+        )
         self.button_delete_all_planned.pack(side="right", padx=10, pady=10)
 
         self.total_posts_label = tk.Label(
@@ -382,10 +441,17 @@ class App(tk.Tk):
         forms.append(frame_inputs)
         forms[-1].grid(column=0, row=1, padx=4, pady=2, sticky="ew")
         # TODO: set 'to' value dependent of total planned posts
-        self.number_of_days_scale = tk.Scale(frame_inputs, from_=0, to=7, orient=tk.HORIZONTAL, tickinterval=1, label="Number of days")
+        self.number_of_days_scale = tk.Scale(
+            frame_inputs,
+            from_=0, to=7, orient=tk.HORIZONTAL, tickinterval=1, label="Number of days"
+        )
         self.number_of_days_scale.pack(fill="both", expand=True)
         self.number_of_days_scale.set(3)
-        self.posts_per_day_scale = tk.Scale(frame_inputs, from_=0, to=10, orient=tk.HORIZONTAL, tickinterval=2, label="Per day")
+        self.posts_per_day_scale = tk.Scale(
+            frame_inputs,
+            from_=0, to=10,
+            orient=tk.HORIZONTAL, tickinterval=2, label="Per day"
+        )
         self.posts_per_day_scale.pack(fill="both", expand=True)
         self.posts_per_day_scale.set(2)
 
@@ -400,11 +466,11 @@ class App(tk.Tk):
 
         self.project_init(self.__project_name)
 
-
-    def tabInstant(self):
+    def tab_instant(self):
         try:
             self.forms_frame.destroy()
-        except:
+        except Exception as e:
+            print('*' + str(e) + '*')
             pass
         self.post_type = 2
         self.forms_frame = tk.Frame(self, borderwidth=2, relief="groove")
@@ -426,7 +492,10 @@ class App(tk.Tk):
         self.tags_forms = []
         self.tags_auto_var = tk.IntVar()
         self.tags_auto_var.set(0)
-        self.tags_auto_checkbox = tk.Checkbutton(self.tags_frame, variable=self.tags_auto_var, text="Auto-tags", font="Arial 6")
+        self.tags_auto_checkbox = tk.Checkbutton(
+            self.tags_frame,
+            variable=self.tags_auto_var, text="Auto-tags", font="Arial 6"
+        )
         self.tags_auto_var.trace("w", self.disable_checkboxes)
         self.tags_forms.append(self.tags_auto_checkbox)
         self.tags_forms[0].grid(column=0, row=0, padx=2, pady=2, sticky="ew")

@@ -5,9 +5,10 @@ import string
 import random
 
 
-def get_image_list(path):
-    onlyfiles = [f for f in listdir(path) if isfile(join(path, f))]
-    return onlyfiles
+def get_image_list(folder_path):
+    only_files = [f for f in listdir(folder_path) if isfile(join(folder_path, f))]
+    return only_files
+
 
 def copy_img(folder_from, folder_to, image_name):
     source = folder_from + '/' + image_name
@@ -16,9 +17,11 @@ def copy_img(folder_from, folder_to, image_name):
     print(source + " => " + destination)
     return 1
 
-def copy_img1(img_path_old, img_path_new): #Copies image, basing on provided paths
+
+def copy_img1(img_path_old, img_path_new):  # Copies image, basing on provided paths
     shutil.copyfile(img_path_old, img_path_new)
     return 1
+
 
 def move_img(folder_from, folder_to, image_name):
     source = folder_from + '/' + image_name
@@ -27,13 +30,16 @@ def move_img(folder_from, folder_to, image_name):
     print(source + " -> " + destination)
     return 1
 
+
 def rename_img(img_folder, old_name, new_name):
     shutil.move(img_folder + '/' + old_name, img_folder + '/' + new_name)
     return 1
 
-def rename_img1(img_path_old, img_path_new): #Renames/moves image, basing on provided paths
+
+def rename_img1(img_path_old, img_path_new):  # Renames/moves image, basing on provided paths
     shutil.move(img_path_old, img_path_new)
     return 1
+
 
 def delete_file(file_path):
     if isfile(file_path):
@@ -41,11 +47,13 @@ def delete_file(file_path):
         return 1
     return 0
 
+
 def create_folder(folder_path):
     if not path.exists(folder_path):
         makedirs(folder_path)
         return True
     return False
+
 
 # Returns dictionary{'name', 'tags', 'extension'}
 def parse_image_name(image_full_name):
@@ -56,6 +64,7 @@ def parse_image_name(image_full_name):
     del image_tags[0]
     return {'name': image_name, 'tags': image_tags, 'extension': image_extension}
 
+
 def is_valid_name(name, size):
     if len(name) != size:
         return False
@@ -64,10 +73,12 @@ def is_valid_name(name, size):
             return False
     return True
 
+
 def generate_alphanumeric(size, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
-def isEnglish(s):
+
+def is_english(s):
     try:
         s.encode(encoding='utf-8').decode('ascii')
     except UnicodeDecodeError:
