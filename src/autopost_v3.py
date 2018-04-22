@@ -34,7 +34,7 @@ class Autopost:
             print("Directory created: '" + self.project.get_img_path_working() + "'")
         print("Folder structure checked.\n")
 
-        self.__db = database.Database(self.project.get_project_path() + '/database.db')
+        self.__db = self.project.get_db()
 
         self.refresh_image_queue()
 

@@ -65,7 +65,7 @@ class Project:
             self.project = self.projects[0]
 
         # Creating the table if it doesn't exist
-        self.__db = database.Database(self.get_project_path() + '/database.db')
+        self.__db = self.get_db()
         sql_init_images = """
             CREATE TABLE IF NOT EXISTS """+self.get_name()+""" (
                 id                  INTEGER         PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
@@ -91,7 +91,6 @@ class Project:
             );
         """
         self.__db.execute(sql_init_log)
-
 
     def get_projects(self):
         return self.projects
@@ -136,3 +135,6 @@ class Project:
 
     def get_telegram_bot_token(self):
         return self.project['telegram_bot_token']
+
+    def get_db(self):
+        return database.Database(self.get_project_path() + '/database.db')
