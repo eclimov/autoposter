@@ -1,23 +1,15 @@
 from tkinter import messagebox
 import tkinter as tk
-from PIL import ImageTk, Image
 import database
 import autopost_v3 as autopost
 import threading
 import sys
+from Project import Project
+from file_control import resize_image
+from PIL import ImageTk, Image
 
 
-def resize_image(image, width, height, keep_ratio=1):
-    if keep_ratio:
-        img_w, img_h = image.size
-        if img_w > img_h:
-            return image.resize((int(width), int(img_h*width/img_w)), Image.ANTIALIAS)
-        else:
-            return image.resize((int(img_w/img_h*height), int(height)), Image.ANTIALIAS)
-    return image.resize((int(width), int(height)), Image.ANTIALIAS)
-
-
-class App(tk.Tk):
+class Interface(tk.Tk):
     def __init__(self, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
         self.wm_attributes("-topmost", 0)  # Set to 1 for topmost positioning
@@ -25,70 +17,19 @@ class App(tk.Tk):
         self.title('Autoposter')
         self.configure(bg='white')
 
-        self.projects = {}
-        self.__db = database.Database('structure.db')
-        # Initialize table with the list of projects
-        sql_init_projects = """
-            CREATE TABLE IF NOT EXISTS projects (
-                id      INTEGER PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
-                name    VARCHAR(40) NOT NULL
-            );
-        """
-        self.__db.execute(sql_init_projects)
-
-        sql_init_vk_groups = """
-            CREATE TABLE IF NOT EXISTS vk_groups (
-                id                      INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                application_id          VARCHAR(40) NOT NULL,
-                application_secret_key  VARCHAR(200) NOT NULL,
-                group_id                VARCHAR(40) NOT NULL,
-                project_id              INTEGER
-            );
-        """
-        self.__db.execute(sql_init_vk_groups)
-
-        sql_init_telegram_groups = """
-            CREATE TABLE IF NOT EXISTS telegram_groups (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                chat_id    VARCHAR(200),
-                bot_token  VARCHAR(200),
-                project_id INTEGER
-            );
-        """
-        self.__db.execute(sql_init_telegram_groups)
-
-        sql = """
-            SELECT
-                projects.name AS project_name,
-                vk_groups.application_id,
-                vk_groups.application_secret_key,
-                vk_groups.group_id
-            FROM
-                projects
-            INNER JOIN vk_groups
-                ON projects.id = vk_groups.project_id
-        """
-        cursor = self.__db.execute(sql)
-        rows = cursor.fetchall()
-        if len(rows) == 0:
-            warning_label = tk.Label(self, text="No projects found in database", font="Arial 13")
+        self.project = Project()
+        if not len(self.project.get_projects()):
+            warning_label = tk.Label(self, text="No VK projects found in database", font="Arial 13")
             warning_label.pack()
             return
-        for row in rows:
-            self.projects[str(row['project_name'])] = {}
-            self.projects[str(row['project_name'])]['vk_application_id'] = str(row['application_id'])
-            self.projects[str(row['project_name'])]['application_secret_key'] = str(row['application_secret_key'])
-            self.projects[str(row['project_name'])]['vk_group_id'] = str(row['group_id'])
-
-        self.__project_name = list(self.projects.keys())[0]
 
         self.toolbar = tk.Frame(self)
         self.toolbar.pack(side="top", fill="x", expand=False)
 
         self.project_var = tk.StringVar(self)
-        self.project_var.set(self.__project_name)  # default value
+        self.project_var.set(self.project.get_name())  # default value
         self.project_var.trace("w", self.choose_project)
-        projects_select = tk.OptionMenu(self.toolbar, self.project_var, *list(self.projects))
+        projects_select = tk.OptionMenu(self.toolbar, self.project_var, *self.project.get_project_list())
         projects_select.pack(side="right")
 
         self.bottom_frame = tk.Frame(self)
@@ -149,11 +90,8 @@ class App(tk.Tk):
         self.post_type = 1  # 1 - scheduled, 2- instant
         self.tab_scheduled()
 
-    def quit(self):
-        sys.exit()
-
     def project_init(self, project_name):
-        self.__project_name = project_name
+        self.project.set_project(project_name)
 
         self.status_info_label.config(text="Loading...", fg="black")
 
@@ -165,12 +103,7 @@ class App(tk.Tk):
             if self.post_type == 1:  # Scheduled
                 self.button_delete_all_planned.config(state="disabled")
 
-            self.controller = autopost.Autopost(
-                application_id=self.projects[project_name]['vk_application_id'],
-                application_secret_key=self.projects[project_name]['application_secret_key'],
-                gid=self.projects[project_name]['vk_group_id'],
-                pname=project_name
-            )
+            self.controller = autopost.Autopost(pname=self.project.get_name())
 
             if self.post_type == 1:  # Scheduled
                 planned_posts = self.controller.get_auto_planned_posts()
@@ -188,7 +121,6 @@ class App(tk.Tk):
                 self.__avatar_path = self.controller.get_group_avatar()
                 self.set_preview_image(self.__avatar_path)
             if self.post_type == 2:  # Instant
-
                 self.post_difference = self.controller.get_post_difference()
                 vk_post_count = int(self.post_difference['vk_post_count'])
                 self.vk_checkbox.config(text="VK("+str(vk_post_count)+')')
@@ -202,7 +134,7 @@ class App(tk.Tk):
                 )
 
                 for i in range(3):
-                    value = tk.StringVar(self, value='' if i else '#' + self.__project_name)
+                    value = tk.StringVar(self, value='' if i else '#' + self.project.get_name())
                     self.tags_forms[i + 1].config(textvariable=value)
 
             if self.post_type == 1:  # Scheduled
@@ -464,7 +396,7 @@ class App(tk.Tk):
 
         self.forms_frame.grid_columnconfigure(0, weight=1)
 
-        self.project_init(self.__project_name)
+        self.project_init(self.project.get_name())
 
     def tab_instant(self):
         try:
@@ -500,7 +432,7 @@ class App(tk.Tk):
         self.tags_forms.append(self.tags_auto_checkbox)
         self.tags_forms[0].grid(column=0, row=0, padx=2, pady=2, sticky="ew")
         for i in range(3):
-            value = tk.StringVar(self, value='' if i else '#'+self.__project_name)
+            value = tk.StringVar(self, value='' if i else '#'+self.project.get_name())
             tag_input = tk.Entry(self.tags_frame, width="7", textvariable=value)
             self.tags_forms.append(tag_input)
             self.tags_forms[i+1].grid(column=i+1, row=0, padx=4, pady=2, sticky="ew")
@@ -581,5 +513,8 @@ class App(tk.Tk):
         forms[-1].grid(column=0, row=4, padx=4, pady=2, sticky="ew", columnspan="2")
         ################################################################################
 
-        self.project_init(self.__project_name)
+        self.project_init(self.project.get_name())
         self.disable_checkboxes()
+
+    def quit(self):
+        sys.exit()

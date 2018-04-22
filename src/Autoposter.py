@@ -1,4 +1,4 @@
-from interface_v2 import *
+from interface import *
 
 if __name__ == "__main__":
     interface = Interface()
