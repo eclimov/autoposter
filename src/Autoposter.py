@@ -1,5 +1,5 @@
-from interface import *
+from interface_v2 import *
 
 if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+    interface = Interface()
+    interface.mainloop()

@@ -3,6 +3,7 @@ from os.path import isfile, join
 import shutil
 import string
 import random
+from PIL import Image
 
 
 def get_image_list(folder_path):
@@ -96,3 +97,13 @@ def distribution(start, end, n):
         return [end]
     step = (end - start) / float(n - 1)
     return [int(round(start + x * step)) for x in range(n)]
+
+
+def resize_image(image, width, height, keep_ratio=1):
+    if keep_ratio:
+        img_w, img_h = image.size
+        if img_w > img_h:
+            return image.resize((int(width), int(img_h*width/img_w)), Image.ANTIALIAS)
+        else:
+            return image.resize((int(img_w/img_h*height), int(height)), Image.ANTIALIAS)
+    return image.resize((int(width), int(height)), Image.ANTIALIAS)

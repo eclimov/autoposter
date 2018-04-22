@@ -11,69 +11,36 @@ from time import sleep
 from file_control import *
 import database
 import random
+from Project import Project
 
 
 class Autopost:
+    # "__" means that attribute is private
+
     # file, where auth data is saved
     __AUTH_FILE = 'assets/.auth_data'
     # chars to exclude from filename
     __FORBIDDEN_CHARS = '/\\\?%*:|"<>!'
 
-    # "__" means that attribute is private
-    __group_id = 0
-    __project_name = ''
-    __app_id = ''
-
-    def __init__(self, application_id, application_secret_key, gid, pname):
-        self.__project_name = pname
-
-        self.__project_root_path = 'projects/'+pname
-        self.__img_folder_path_new = self.__project_root_path + '/images_new'
-        self.__img_folder_path_working = self.__project_root_path + '/images_working'
+    def __init__(self, pname):
+        self.project = Project()
+        self.project.set_project(pname)
 
         # Create folder structure
         print("Checking folder structure...")
-        if create_folder(self.__img_folder_path_new):
-            print("Directory created: '" + self.__img_folder_path_new + "'")
-        if create_folder(self.__img_folder_path_working):
-            print("Directory created: '" + self.__img_folder_path_working + "'")
+        if create_folder(self.project.get_img_path_new()):
+            print("Directory created: '" + self.project.get_img_path_new() + "'")
+        if create_folder(self.project.get_img_path_working()):
+            print("Directory created: '" + self.project.get_img_path_working() + "'")
         print("Folder structure checked.\n")
 
-        self.__db = database.Database(self.__project_root_path+'/database.db')
-        # Creating the table if it doesn't exist
-        sql_init_images = """
-            CREATE TABLE IF NOT EXISTS """+pname+""" (
-                id                  INTEGER         PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
-                name                VARCHAR(200)    NOT NULL,
-                tags                VARCHAR(200),
-                allow_post_months   VARCHAR(100),
-                allow_post_days     VARCHAR(200),
-                except_post_months  VARCHAR(200),
-                except_post_days    VARCHAR(200)
-            );
-        """
-        self.__db.execute(sql_init_images)
-        # Creating log table if it doesn't exist
-        sql_init_log = """
-            CREATE TABLE IF NOT EXISTS activity_log (
-                id                  INTEGER PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
-                artwork_id          INTEGER,
-                vk_post_id          INTEGER,
-                telegram_post_id    INTEGER,
-                message             VARCHAR(400),
-                post_date           DATETIME DEFAULT (DateTime('now', 'localtime')) NOT NULL
-            );
-        """
-        self.__db.execute(sql_init_log)
+        self.__db = database.Database(self.project.get_project_path() + '/database.db')
 
         self.refresh_image_queue()
 
-        self.__app_id = application_id
-        self.__app_secret_key = application_secret_key
-        self.__group_id = gid
+        self.__v_api = "5.57"
         self.__access_token, _ = self.get_auth_params()
         self.__api = self.get_api(self.__access_token)
-        self.__v_api = "5.57"
         #self.__watermarker = watermarker.Watermarker('assets/watermark_'+pname+'.png', pname + '/notWatermarkedArchive/')
 
     def get_post_difference(self):
@@ -88,9 +55,6 @@ class Autopost:
         result = cursor.fetchone()
         return {'vk_post_count': result['vk_post_count'], 'telegram_post_count': result['telegram_post_count']}
 
-    def get_group_id(self):
-        return self.__group_id
-
     def get_group_info_by_id(self, group_id):
         method_url = 'https://api.vk.com/method/groups.getById?v='+self.__v_api
         data = dict(group_id=group_id)  # It is possible to get private info, if passing other params. See documentation
@@ -100,9 +64,9 @@ class Autopost:
 
     def get_group_avatar(self):
         avatar_url = self.get_group_info_by_id(
-            self.get_group_id()
+            self.project.get_vk_group_id()
         )[0]['photo_200']
-        avatar_path = self.__project_root_path+'/avatar.jpg'
+        avatar_path = self.project.get_project_path() + '/avatar.jpg'
         f = open(avatar_path, 'wb')
         f.write(requests.get(avatar_url).content)
         f.close()
@@ -117,7 +81,7 @@ class Autopost:
         self.db_cleanup()
 
     def refresh_old_images(self):
-        old_images_list = get_image_list(self.__img_folder_path_working)
+        old_images_list = get_image_list(self.project.get_img_path_working())
         ids_updated = []
         for old_image in old_images_list:
             image = parse_image_name(old_image)
@@ -128,7 +92,7 @@ class Autopost:
                 SELECT 
                     id
                 FROM
-                    """ + self.__project_name + """
+                    """ + self.project.get_name() + """
                 WHERE 
                     name = '""" + image_name + """'
             """
@@ -136,7 +100,7 @@ class Autopost:
             result = cursor.fetchone()
             if result is None:
                 sql = """
-                    INSERT INTO """ + self.__project_name + """ (name, tags) 
+                    INSERT INTO """ + self.project.get_name() + """ (name, tags) 
                     VALUES (
                         '""" + image_name + """', 
                         '""" + image_tags_string + """'
@@ -150,7 +114,7 @@ class Autopost:
                     SELECT
                         id
                     FROM
-                        """ + self.__project_name + """ 
+                        """ + self.project.get_name() + """ 
                     WHERE
                         name = '""" + image_name + """'
                         AND
@@ -160,7 +124,7 @@ class Autopost:
                 if len(cursor.fetchall()) == 0:
                     row_id = result['id']
                     sql = """
-                        UPDATE """ + self.__project_name + """
+                        UPDATE """ + self.project.get_name() + """
                         SET tags = '""" + image_tags_string + """' 
                         WHERE name = '""" + image_name + """'
                     """
@@ -172,7 +136,7 @@ class Autopost:
                 print("Row updated in DB: id=" + str(row_id))
 
     def refresh_new_images(self):
-        new_images_list = get_image_list(self.__img_folder_path_new)
+        new_images_list = get_image_list(self.project.get_img_path_new())
         for new_image in new_images_list:
             image = parse_image_name(new_image)
             if not is_valid_name(name=image['name'],size=4) or not self.image_exists_in_db(name=image['name']):
@@ -180,9 +144,9 @@ class Autopost:
             image_tags_string = ",".join(image['tags'])
             db_image_name = image['name'] + '.' + image['extension']
             disk_image_name = image['name'] + ("," + image_tags_string if image_tags_string.strip()!='' else '') + '.' + image['extension']
-            rename_img(self.__img_folder_path_new, new_image, disk_image_name)
+            rename_img(self.project.get_img_path_new(), new_image, disk_image_name)
             sql = """
-                INSERT INTO """ + self.__project_name + """ (name, tags) 
+                INSERT INTO """ + self.project.get_name() + """ (name, tags) 
                 VALUES (
                     '""" + db_image_name + """',
                     '""" + image_tags_string + """'
@@ -190,10 +154,10 @@ class Autopost:
             """
             cursor = self.__db.execute(sql)
             print("Row inserted in DB: id=" + str(cursor.lastrowid))
-            move_img(self.__img_folder_path_new, self.__img_folder_path_working, disk_image_name)
+            move_img(self.project.get_img_path_new(), self.project.get_img_path_working(), disk_image_name)
 
     def db_cleanup(self):
-        working_images_list = get_image_list(self.__img_folder_path_working)
+        working_images_list = get_image_list(self.project.get_img_path_working())
         working_images_list_sql_string = ''
         is_first = True
         for working_image in working_images_list:
@@ -205,7 +169,7 @@ class Autopost:
                 working_images_list_sql_string += "'" + image_name + "'"
                 is_first = False
         sql = """
-            DELETE FROM """ + self.__project_name + """
+            DELETE FROM """ + self.project.get_name() + """
             WHERE name NOT IN(""" + working_images_list_sql_string + """)
         """
         cursor = self.__db.execute(sql)
@@ -217,7 +181,7 @@ class Autopost:
             SELECT 
                 id
             FROM
-                """ + self.__project_name + """
+                """ + self.project.get_name() + """
             WHERE
                 name = '""" + name + """'
         """
@@ -234,7 +198,7 @@ class Autopost:
                 SELECT 
                     id 
                 FROM
-                    """ + self.__project_name + """
+                    """ + self.project.get_name() + """
                 WHERE
                     name LIKE '""" + random_value + """%'
             """
@@ -275,8 +239,8 @@ class Autopost:
                 "messages,notifications,stats,ads,offline"
                 "&client_secret={app_secret_key}"
                 "&display=popup&response_type=token&v={v_api}".format(
-                    app_id=self.__app_id,
-                    app_app_secret_key=self.__app_secret_key,
+                    app_id=self.project.get_vk_application_id(),
+                    app_secret_key=self.project.get_application_secret_key(),
                     v_api=self.__v_api
                 )
             )
@@ -329,8 +293,8 @@ class Autopost:
         return response
 
     def get_posts(self, search_filter="all", offset=0):
-        owner_id = str(-int(self.__group_id))
-        domain = "public" + self.__group_id
+        owner_id = str(-int(self.project.get_vk_group_id()))
+        domain = "public" + self.project.get_vk_group_id()
         if offset == (-1):  # Offset should be positive
             offset = 0
         return self.__api.wall.get(
@@ -344,7 +308,7 @@ class Autopost:
 
     def get_upload_image_link(self):
         method_url = 'https://api.vk.com/method/photos.getWallUploadServer?v='+self.__v_api
-        data = dict(access_token=self.__access_token, gid=self.__group_id)
+        data = dict(access_token=self.__access_token, gid=self.project.get_vk_group_id())
         response = requests.post(method_url, data)
         result = json.loads(response.text)
         upload_url = result['response']['upload_url']
@@ -357,12 +321,12 @@ class Autopost:
 
     def save_image_on_server(self, result):
         method_url = 'https://api.vk.com/method/photos.saveWallPhoto?v='+self.__v_api
-        data = dict(access_token=self.__access_token, gid=self.__group_id, photo=result['photo'], hash=result['hash'],
+        data = dict(access_token=self.__access_token, gid=self.project.get_vk_group_id(), photo=result['photo'], hash=result['hash'],
                     server=result['server'])
         response = requests.post(method_url, data)
         #result = json.loads(response.text)['response'][0]['id']
         res = json.loads(response.text)['response'][0]
-        result = 'photo'+str(res['owner_id'])+'_'+str(res['id']) #'attachments' string in format "<type><owner_id>_<media_id>"
+        result = 'photo'+str(res['owner_id'])+'_'+str(res['id'])  # 'attachments' string in format "<type><owner_id>_<media_id>"
         return result
 
     def generate_tags_string(self, image_tags=None):
@@ -376,7 +340,7 @@ class Autopost:
             if len(image_tags):
                 tag2 = random.choice(image_tags)
                 suffix_tags += ' #' + tag2
-        return ('#' + self.__project_name + ' ' + suffix_tags).strip()
+        return ('#' + self.project.get_name() + ' ' + suffix_tags).strip()
 
     def get_datetime_starting_point(self):
         total_posts_planned = self.get_posts(search_filter="postponed")["count"]
@@ -450,7 +414,7 @@ class Autopost:
                     IFNULL(al.used_times, 0),
                     al.when_last_used
                 FROM
-                    """ + self.__project_name + """ p
+                    """ + self.project.get_name() + """ p
                 LEFT JOIN (
                     SELECT
                         artwork_id,
@@ -486,7 +450,7 @@ class Autopost:
                 'name': result['name'].split('.')[0],
                 'tags': self.generate_tags_string(result['tags'].split(',') if result['tags'].strip()!='' else []),
                 'extension': result['name'].split('.')[-1],
-                'image_path': self.__img_folder_path_working + '/' + result['name'].split('.')[0] + (',' + result['tags'] if result['tags'].strip()!='' else '') + '.' + result['name'].split('.')[1]
+                'image_path': self.project.get_img_path_working() + '/' + result['name'].split('.')[0] + (',' + result['tags'] if result['tags'].strip() != '' else '') + '.' + result['name'].split('.')[1]
             }
             return image
         else:
@@ -537,12 +501,12 @@ class Autopost:
                 else:
                     response['status'] = 0
                     response['message'] = "Error deleting post "+str(post['vk_post_id'])
-                with open(self.__project_root_path + '/' + self.__project_name + '_log.txt', 'a') as logfile:
+                with open(self.project.get_project_path() + '/' + self.project.get_name() + '_log.txt', 'a') as logfile:
                     logfile.write(str(response['message']) + '\n')
             yield response
 
     def delete_posts(self, post_id=0, search_filter="postponed"):
-        owner_id = str(-int(self.__group_id))
+        owner_id = str(-int(self.project.get_vk_group_id()))
         if post_id:
             self.__api.wall.delete(owner_id=owner_id, post_id=post_id, v=self.__v_api)
             return True
@@ -583,7 +547,7 @@ class Autopost:
                 sql = "INSERT INTO activity_log("+','.join(columns)+")"
                 sql += "VALUES("+','.join(values)+")"
                 self.__db.execute(sql)
-            with open(self.__project_root_path + '/' + self.__project_name + '_log.txt', 'a') as logfile:
+            with open(self.project.get_project_path() + '/' + self.project.get_name() + '_log.txt', 'a') as logfile:
                 logfile.write(json.dumps(insert) + '\n')
         return True
 
@@ -603,9 +567,9 @@ class Autopost:
                     post['telegram_args'] = {}
                     if index == 0:  # The first one should be posted in Telegram
                         post['telegram_args']['image_path'] = post['image']['image_path']
-                        post['telegram_args']['url'] = 'https://vk.com/public' + self.__group_id
+                        post['telegram_args']['url'] = 'https://vk.com/public' + self.project.get_vk_group_id()
                     post['vk_args'] = {}
-                    post['vk_args']['owner_id'] = str(-int(self.__group_id))
+                    post['vk_args']['owner_id'] = str(-int(self.project.get_vk_group_id()))
                     post['vk_args']['signed'] = 1
                     post['vk_args']['message'] = post['image']['tags']
                     post['vk_args']['publish_date'] = post['datetime_unix']
@@ -650,12 +614,12 @@ class Autopost:
                                             biggest_res = int(key_split[1])
                                     attachment_images.append(image_url)
                                     image_name = self.generate_image_name(size=4) + '.jpg'
-                                    image_path = self.__img_folder_path_working + '/' + image_name
+                                    image_path = self.project.get_img_path_working() + '/' + image_name
                                     f = open(image_path, 'wb')
                                     f.write(requests.get(image_url).content)
                                     f.close()
                                     sql = """
-                                        INSERT INTO """ + self.__project_name + """(name, tags)
+                                        INSERT INTO """ + self.project.get_name() + """(name, tags)
                                         VALUES(
                                             '""" + image_name + """',
                                             ''
@@ -681,7 +645,7 @@ class Autopost:
                                         attachment_type + owner_id + '_' + media_id
                                     )
                                     video = self.__api.video.get(
-                                        owner_id=-int(self.__group_id),
+                                        owner_id=-int(self.project.get_vk_group_id()),
                                         videos=str(attachment['video']['owner_id'])+'_'+str(attachment['video']['id'])+'_'+str(attachment['video']['access_key']),
                                         v=self.__v_api
                                     )
@@ -703,7 +667,7 @@ class Autopost:
                 if vk_message.strip() != '':
                     post['vk_args']['message'] = vk_message
                 if post['vk_args']:  # If there is something to post
-                    post['vk_args']['owner_id'] = str(-int(self.__group_id))
+                    post['vk_args']['owner_id'] = str(-int(self.project.get_vk_group_id()))
                     post['vk_args']['signed'] = 1
             if 'telegram' in instant and instant['telegram'] == 1:
                 if 'auto_image' in instant and instant['auto_image'] == 1 and post['image']:
@@ -715,7 +679,7 @@ class Autopost:
                     activity_log_args['message'] = instant['message']
                     post['telegram_args']['text'] = instant['message']
                 if 'with_vk_link' in instant and instant['with_vk_link'] == 1:
-                    post['telegram_args']['url'] = 'https://vk.com/public'+self.__group_id
+                    post['telegram_args']['url'] = 'https://vk.com/public' + self.project.get_vk_group_id()
             planned_posts = [post]
 
         for post_index, post in enumerate(planned_posts):
@@ -731,9 +695,9 @@ class Autopost:
                                 image_temp_name = "temp." + post['image']['extension']
                                 copy_img1(
                                     img_path_old=post['image']['image_path'],
-                                    img_path_new=self.__img_folder_path_working + '/' + image_temp_name
+                                    img_path_new=self.project.get_img_path_working() + '/' + image_temp_name
                                 )
-                                img_path = self.__img_folder_path_working + '/' + image_temp_name
+                                img_path = self.project.get_img_path_working() + '/' + image_temp_name
                             else:
                                 img_path = post['image']['image_path']
                             if post['vk_args']:
@@ -762,7 +726,7 @@ class Autopost:
                 post_id = (self.__api.wall.post(**post['vk_args']))['post_id']  # post_id
                 activity_log_args['vk_post_id'] = str(post_id)
                 if post['telegram_args'] and (is_instant and 'with_vk_link' in instant and instant['with_vk_link'] == 1): #Is customized instant
-                    post['telegram_args']['url'] = 'https://vk.com/public'+self.__group_id+'?w=wall-'+self.__group_id+'_'+str(post_id)
+                    post['telegram_args']['url'] = 'https://vk.com/public' + self.project.get_vk_group_id() + '?w=wall-' + self.project.get_vk_group_id() + '_' + str(post_id)
                 if 'image' in post:
                     return_data = post['image']
                 if 'datetime_string' in post:
@@ -794,7 +758,7 @@ class Autopost:
 
             if 'image' in post and post['image'] != '':
                 if not is_english(post['image']['image_path']):
-                    delete_file(self.__img_folder_path_working + '/' + "temp." + post['image']['extension'])
+                    delete_file(self.project.get_img_path_working() + '/' + "temp." + post['image']['extension'])
 
             yield return_data
 
@@ -810,31 +774,13 @@ class Autopost:
                 print("No text or image given")
                 return
 
-            struct_db = database.Database('structure.db')
-            sql = """
-                SELECT
-                    telegram_groups.chat_id,
-                    telegram_groups.bot_token
-                FROM
-                    telegram_groups
-                INNER JOIN projects
-                    ON
-                    telegram_groups.project_id = projects.id
-                WHERE 
-                    projects.name = '""" + str(self.__project_name) + """'
-            """
-            cursor = struct_db.execute(sql)
-            row = cursor.fetchone()
-            if not row:
+            if not (self.project.get_telegram_chat_id() and self.project.get_telegram_bot_token()):
                 print("No available chat_id an/or bot token found in database")
                 return False
 
-            chat_id = row['chat_id']
-            bot_token = row['bot_token']
-
             args = {
                 'data': {
-                    'chat_id': chat_id
+                    'chat_id': self.project.get_telegram_chat_id()
                 }
             }
 
@@ -889,7 +835,7 @@ class Autopost:
                 else:
                     method = "sendPhoto" + ("?caption=" + text if text != '' else '')
                     args['files'] = {'photo': open(image_path, 'rb')}
-            url = "https://api.telegram.org/bot"+bot_token + "/" + method
+            url = "https://api.telegram.org/bot" + self.project.get_telegram_bot_token() + "/" + method
 
             r = requests.post(url, **args)
             #print(r.status_code, r.reason, r.content)

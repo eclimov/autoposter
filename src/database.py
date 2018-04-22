@@ -16,6 +16,7 @@ class Database:
         self.__con.close()
 
 
+
 # id | name  | tags  | allow_post_months     | allow_post_days       | when_last_used    | used_times
 #    |       |       | NULL - all, '' - none | NULL - all, '' - none |                   | default 0
 
