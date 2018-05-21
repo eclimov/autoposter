@@ -57,7 +57,7 @@ class Autopost:
 
     def get_group_info_by_id(self, group_id):
         method_url = 'https://api.vk.com/method/groups.getById?v='+self.__v_api
-        data = dict(group_id=group_id)  # It is possible to get private info, if passing other params. See documentation
+        data = dict(access_token=self.__access_token, group_id=group_id)  # It is possible to get private info, if passing other params. See documentation
         response = requests.post(method_url, data)
         result = json.loads(response.text)
         return result['response']
