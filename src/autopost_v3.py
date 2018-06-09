@@ -375,7 +375,7 @@ class Autopost:
                 image = self.choose_image(datetime_to_post, 'activity_log_temp')
                 if image:  # If image has been chosen successfully
                     self.__db.execute("""
-                        INSERT INTO activity_log(artwork_id, post_date) 
+                        INSERT INTO activity_log_temp(artwork_id, post_date) 
                         VALUES(
                             """ + str(image['id']) + """,
                             '""" + datetime_to_post_string + """'
@@ -443,6 +443,7 @@ class Autopost:
             ORDER BY RANDOM() 
             LIMIT 1
         """
+
         result = self.__db.execute(sql).fetchone()
         if result:
             image = {
@@ -471,8 +472,10 @@ class Autopost:
                 vk_post_id IS NOT NULL
         """
         result = self.__db.execute(sql).fetchall()
+
         for post in result:
             sleep(0.4)  # Time in seconds. Max: 3/sec
+
             if str(post['vk_post_id']).strip() != 0:
                 if self.delete_posts(post_id=post['vk_post_id']):
                     response['status'] = 1
@@ -593,7 +596,7 @@ class Autopost:
                         vk_message = post['image']['tags']
                 elif 'post_suggested' in instant and instant['post_suggested'] == 1:  # use suggested post
                     suggested_posts = self.get_posts(search_filter="suggests")['items']
-                    for suggested_post in suggested_posts:
+                    for suggested_post in reversed(suggested_posts):  # Loop backwards to get older posts first
                         # print(json.dumps(suggested_post, indent=2))
                         # return
                         if 'attachments' in suggested_post:

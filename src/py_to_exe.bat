@@ -1,1 +1,1 @@
-C:\Python\Python35-32\Scripts\pyinstaller -w -F -i "assets\icon.ico" Autoposter.py
+"E:\Program Files\Python\Python36-32\Scripts\pyinstaller" -w -F -i "assets\icon.ico" Autoposter.py
