@@ -2,3 +2,4 @@ structure.db
 assets/
 projects/
 .idea/
+*.exe

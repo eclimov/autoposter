@@ -312,9 +312,9 @@ class Interface(tk.Tk):
 
         checkbox_auto_tags_state = checkbox_vk and checkbox_auto_image
         input_tags_state = not checkbox_auto_tags and not checkbox_suggested
-        checkbox_telegram_link_state = checkbox_telegram
         checkbox_auto_image_state = checkbox_vk and not checkbox_suggested
         checkbox_suggested_state = checkbox_vk and not checkbox_auto_image
+        checkbox_telegram_link_state = checkbox_telegram
         input_text_state = (checkbox_vk or checkbox_telegram) and not checkbox_suggested
 
         self.tags_auto_checkbox.config(state="normal" if checkbox_auto_tags_state else "disabled")

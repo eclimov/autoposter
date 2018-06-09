@@ -607,7 +607,7 @@ class Autopost:
                                     attachment_type = str(attachment['type'])
                                     url = attachment[attachment_type]['url']
                                     vk_attachments.append(url)
-                                if 'photo' in attachment: # filing local database with new artworks
+                                if 'photo' in attachment:  # filing local database with new artworks
                                     # getting the biggest resolution available
                                     biggest_res = 0
                                     for key in attachment['photo']:
@@ -682,6 +682,7 @@ class Autopost:
                     activity_log_args['message'] = instant['message']
                     post['telegram_args']['text'] = instant['message']
                 if 'with_vk_link' in instant and instant['with_vk_link'] == 1:
+                    # 'url' button won't be shown, when posting suggested posts, so the line below is useless atm
                     post['telegram_args']['url'] = 'https://vk.com/public' + self.project.get_vk_group_id()
             planned_posts = [post]
 
