@@ -163,7 +163,9 @@ class Interface(tk.Tk):
         self.panel.configure(image=tk_image)
         self.panel.image = tk_image
 
+    # The following is for debug purposes only. Not working in PROD
     def open_log_file(self):
+        self.status_info_label.config(text=r'explorer /select,"'+sys.path[0]+'\\'+self.controller.get_log_file_path().replace('/', '\\')+'"')
         subprocess.Popen(r'explorer /select,"'+sys.path[0]+'\\'+self.controller.get_log_file_path().replace('/', '\\')+'"')
 
     def disable_all_buttons_common(self, disable=True):
@@ -366,6 +368,8 @@ class Interface(tk.Tk):
         frame_like = tk.LabelFrame(self.forms_frame, text="Likes", bg="white")
         forms.append(frame_like)
         forms[-1].grid(column=0, row=0, padx=4, pady=2, sticky="ew")
+        ''' 
+        # The following is for debug purposes only. Not working in PROD
         self.button_open_log_file = tk.Button(
             frame_like,
             bg="#afb7c6",
@@ -374,6 +378,7 @@ class Interface(tk.Tk):
             command=self.open_log_file
         )
         self.button_open_log_file.pack(side="right", padx=(0, 10), pady=10)
+        '''
         self.button_like = tk.Button(
             frame_like,
             bg="#f4d442",
@@ -381,7 +386,7 @@ class Interface(tk.Tk):
             font="Arial 8",
             command=self.like_posts
         )
-        self.button_like.pack(side="right", padx=(10, 0), pady=10)
+        self.button_like.pack(side="right", padx=(10, 10), pady=10)
 
         frame_planned = tk.LabelFrame(self.forms_frame, text="Planned", bg="white")
         forms.append(frame_planned)
