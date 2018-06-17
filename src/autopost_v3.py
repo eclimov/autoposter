@@ -687,7 +687,7 @@ class Autopost:
                         post['telegram_args']['url'] = 'https://vk.com/public' + self.project.get_vk_group_id()
                     post['vk_args'] = {}
                     post['vk_args']['owner_id'] = str(-int(self.project.get_vk_group_id()))
-                    post['vk_args']['signed'] = 1
+                    post['vk_args']['signed'] = random.choice([0, 1])  # Sign posts randomly to simulate natural conditions
                     post['vk_args']['message'] = post['image']['tags']
                     post['vk_args']['publish_date'] = post['datetime_unix']
         elif (instant is not None) and (type(instant) is dict):  # Instant
