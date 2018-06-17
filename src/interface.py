@@ -7,6 +7,7 @@ import sys
 from Project import Project
 from file_control import resize_image
 from PIL import ImageTk, Image
+import subprocess
 
 
 class Interface(tk.Tk):
@@ -37,7 +38,7 @@ class Interface(tk.Tk):
 
         self.buttonbar = tk.Frame(self.bottom_frame)
         self.buttonbar.pack(side="right", expand=False)
-        button_quit = tk.Button(
+        self.button_quit = tk.Button(
             self.buttonbar,
             bg="gray",
             text='Quit',
@@ -45,7 +46,7 @@ class Interface(tk.Tk):
             height=1,
             command=self.quit
         )
-        button_quit.pack(side="right", padx=10, pady=10)
+        self.button_quit.pack(side="right", padx=10, pady=10)
         self.button_post = tk.Button(
             self.buttonbar,
             bg="#88ce46",
@@ -96,12 +97,10 @@ class Interface(tk.Tk):
         self.status_info_label.config(text="Loading...", fg="black")
 
         def callback():
-            self.button_post.config(state="disabled")
-            self.button_scheduled.config(state="disabled")
-            self.button_instant.config(state="disabled")
+            self.disable_all_buttons_common(True)
 
             if self.post_type == 1:  # Scheduled
-                self.button_delete_all_planned.config(state="disabled")
+                self.disable_all_buttons_scheduled(True)
 
             self.controller = autopost.Autopost(pname=self.project.get_name())
 
@@ -138,11 +137,9 @@ class Interface(tk.Tk):
                     self.tags_forms[i + 1].config(textvariable=value)
 
             if self.post_type == 1:  # Scheduled
-                self.button_delete_all_planned.config(state="normal")
-            self.button_instant.config(state="normal")
-            self.button_scheduled.config(state="normal")
-            self.button_post.config(state="normal")
+                self.disable_all_buttons_scheduled(False)
             self.status_info_label.config(text="", fg="black")
+            self.disable_all_buttons_common(False)
         t = threading.Thread(target=callback)
         t.start()
 
@@ -166,6 +163,26 @@ class Interface(tk.Tk):
         self.panel.configure(image=tk_image)
         self.panel.image = tk_image
 
+    def open_log_file(self):
+        subprocess.Popen(r'explorer /select,"'+sys.path[0]+'\\'+self.controller.get_log_file_path().replace('/', '\\')+'"')
+
+    def disable_all_buttons_common(self, disable=True):
+        state = "disabled" if disable else "normal"
+        self.button_scheduled.config(state=state)
+        self.button_instant.config(state=state)
+        self.button_post.config(state=state)
+        self.button_quit.config(state=state)
+
+    def disable_all_buttons_scheduled(self, disable=True):
+        state = "disabled" if disable else "normal"
+        self.disable_all_buttons_common(disable)
+        self.button_delete_all_planned.config(state=state)
+        self.button_like.config(state=state)
+
+    def disable_all_buttons_instant(self, disable=True):
+        state = "disabled" if disable else "normal"
+        self.disable_all_buttons_common(disable)
+
     def delete_all_planned(self):
         delete = False
         if self.total_planned_posts:
@@ -174,8 +191,8 @@ class Interface(tk.Tk):
             )
         if delete:
             def callback():
-                self.button_post.config(state="disabled")
-                self.button_delete_all_planned.config(state="disabled", text="Loading...")
+                self.disable_all_buttons_scheduled(True)
+                self.button_delete_all_planned.config(text="Loading...")
                 for delete_post in self.controller.delete_all_planned_posts():
                     if delete_post['status']:
                         self.total_planned_posts -= 1
@@ -185,12 +202,20 @@ class Interface(tk.Tk):
                         self.status_info_label.config(text=delete_post['message'], fg="red")
                     if 'post_date' in delete_post:
                         self.last_post.config(text="Last planned post date: " + delete_post['post_date'])
-
-                self.button_delete_all_planned.config(state="normal", text="Delete all")
-                self.button_post.config(state="normal")
+                self.disable_all_buttons_scheduled(False)
+                self.button_delete_all_planned.config(text="Delete all")
 
             t = threading.Thread(target=callback)
             t.start()
+
+    def like_posts(self):
+        def callback():
+            self.disable_all_buttons_scheduled(True)
+            for liked_post in self.controller.like_latest_not_liked_posts():
+                self.status_info_label.config(text=liked_post['message'], fg="black")
+            self.disable_all_buttons_scheduled(False)
+        t = threading.Thread(target=callback)
+        t.start()
 
     def post(self):
         if self.post_type == 1:  # Scheduled
@@ -205,8 +230,7 @@ class Interface(tk.Tk):
             self.total_posted = 0
 
             def callback():
-                self.button_delete_all_planned.config(state="disabled")
-                self.button_post.config(state="disabled")
+                self.disable_all_buttons_scheduled(True)
                 # Maximum posts to be scheduled: 150
                 for post in self.controller.add_posts(scheduled={'per_day': per_day, 'days_number': days_number}):
                     self.set_preview_image(post['image_path'])
@@ -217,8 +241,7 @@ class Interface(tk.Tk):
                         status_text = "Scheduled: "+str(self.total_posted) + '/' + str(total_planned) + (" ✔" if self.total_posted==total_planned else '')
                         self.status_info_label.config(text=status_text, fg="green")
                     self.total_posts_label.config(text="Auto-planned posts: "+str(self.total_planned_posts))
-                self.button_post.config(state="normal")
-                self.button_delete_all_planned.config(state="normal")
+                self.disable_all_buttons_scheduled(False)
             t = threading.Thread(target=callback)
             t.start()
         elif self.post_type == 2:  # Instant
@@ -273,7 +296,7 @@ class Interface(tk.Tk):
                     vk_args['instant']['with_vk_link'] = 1
 
             def callback():
-                self.button_post.config(state="disabled")
+                self.disable_all_buttons_instant(True)
                 for post in self.controller.add_posts(**vk_args):
                     if post:
                         if 'status' in post and post['status']:
@@ -281,7 +304,7 @@ class Interface(tk.Tk):
                                 self.total_suggested -= 1
                                 self.suggested_checkbox.config(text="Post suggested(" + str(self.total_suggested) + ")")
                             self.status_info_label.config(text="Posted ✔", fg="green")
-                self.button_post.config(state="normal")
+                self.disable_all_buttons_instant(False)
             t = threading.Thread(target=callback)
             t.start()
 
@@ -339,12 +362,33 @@ class Interface(tk.Tk):
         self.forms_frame = tk.Frame(self, borderwidth=2, relief="groove")
         self.forms_frame.pack(side="top", fill="both", expand="True", padx=2, pady=2)
         forms = []
-        frame_info = tk.LabelFrame(self.forms_frame, text="Planned", bg="white")
-        forms.append(frame_info)
+
+        frame_like = tk.LabelFrame(self.forms_frame, text="Likes", bg="white")
+        forms.append(frame_like)
         forms[-1].grid(column=0, row=0, padx=4, pady=2, sticky="ew")
+        self.button_open_log_file = tk.Button(
+            frame_like,
+            bg="#afb7c6",
+            text='^',
+            font="Arial 8",
+            command=self.open_log_file
+        )
+        self.button_open_log_file.pack(side="right", padx=(0, 10), pady=10)
+        self.button_like = tk.Button(
+            frame_like,
+            bg="#f4d442",
+            text='Like 10 latest not yet liked posts and their reposts',
+            font="Arial 8",
+            command=self.like_posts
+        )
+        self.button_like.pack(side="right", padx=(10, 0), pady=10)
+
+        frame_planned = tk.LabelFrame(self.forms_frame, text="Planned", bg="white")
+        forms.append(frame_planned)
+        forms[-1].grid(column=0, row=1, padx=4, pady=2, sticky="ew")
 
         self.button_delete_all_planned = tk.Button(
-            frame_info,
+            frame_planned,
             bg="#ff7777",
             text='Delete all',
             font="Arial 6",
@@ -353,7 +397,7 @@ class Interface(tk.Tk):
         self.button_delete_all_planned.pack(side="right", padx=10, pady=10)
 
         self.total_posts_label = tk.Label(
-            frame_info,
+            frame_planned,
             bg="white",
             text="loading...",
             font="Arial 7", anchor="w"
@@ -361,7 +405,7 @@ class Interface(tk.Tk):
         self.total_posts_label.pack(side="top", fill="both", expand=True)
 
         self.last_post = tk.Label(
-            frame_info,
+            frame_planned,
             bg="white",
             text="loading...",
             font="Arial 7",
@@ -371,7 +415,7 @@ class Interface(tk.Tk):
 
         frame_inputs = tk.LabelFrame(self.forms_frame)
         forms.append(frame_inputs)
-        forms[-1].grid(column=0, row=1, padx=4, pady=2, sticky="ew")
+        forms[-1].grid(column=0, row=2, padx=4, pady=2, sticky="ew")
         # TODO: set 'to' value dependent of total planned posts
         self.number_of_days_scale = tk.Scale(
             frame_inputs,
@@ -389,8 +433,8 @@ class Interface(tk.Tk):
 
         image_viewer = tk.LabelFrame(self.forms_frame)
         forms.append(image_viewer)
-        forms[-1].grid(column=0, row=2, padx=4, pady=2, sticky="ew")
-        self.panel = tk.Label(image_viewer, width=256, height=256)
+        forms[-1].grid(column=0, row=3, padx=4, pady=2, sticky="ew")
+        self.panel = tk.Label(image_viewer, width=300, height=256)
         self.set_preview_image(image_path="assets/autoposter_avatar_big.jpg",grayscale=1)
         self.panel.pack(side="bottom", fill="both", expand="yes")
 

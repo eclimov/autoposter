@@ -9,9 +9,9 @@ import requests
 import json
 from time import sleep
 from file_control import *
-import database
 import random
 from Project import Project
+from pathlib import Path
 
 
 class Autopost:
@@ -32,6 +32,9 @@ class Autopost:
             print("Directory created: '" + self.project.get_img_path_new() + "'")
         if create_folder(self.project.get_img_path_working()):
             print("Directory created: '" + self.project.get_img_path_working() + "'")
+        if not Path(self.get_log_file_path()).is_file():  # if log file doesn't exist
+            print("Log file created.")
+            self.append_to_log_file('')
         print("Folder structure checked.\n")
 
         self.__db = self.project.get_db()
@@ -42,6 +45,90 @@ class Autopost:
         self.__access_token, _ = self.get_auth_params()
         self.__api = self.get_api(self.__access_token)
         #self.__watermarker = watermarker.Watermarker('assets/watermark_'+pname+'.png', pname + '/notWatermarkedArchive/')
+
+    def like_latest_not_liked_posts(self, iterations=10):  # Like reposts as well. Reposts aren't taken into count
+        posts_count = self.get_posts(count=1, offset=0)['count']
+        if iterations > 0 and posts_count > 0:
+            if iterations > posts_count:
+                iterations = posts_count
+            self.wait()
+            posts = self.get_posts(search_filter="owner,others", count=iterations)['items']
+            for post in posts:  # Pinned post goes the first
+                self.wait()
+                reposts = self.get_reposts(post['id'], random.randint(7, 13))
+                for repost in reposts:
+                    self.wait()
+                    try:
+                        if not self.is_liked(post_id=repost['id'], owner_id=str(repost['to_id']), user_id=self.get_user_info()['id']):
+                            self.wait(1.5)
+                            self.add_like(repost['id'], repost['to_id'])
+                            self.append_to_log_file('Liked repost https://vk.com/wall' + str(repost['to_id']) + '_' + str(repost['id']))
+                            yield {'message': 'repost ' + str(repost['id']) + ' liked'}
+                        else:
+                            yield {'message': 'repost ' + str(repost['id']) + ' checked'}
+                    except Exception as e:
+                        self.append_to_log_file('Error. Could not like repost https://vk.com/wall' + self.project.get_vk_group_id() + '_' + str(post['id']) + ' - probably, repost is private. Error: ' + str(e))
+                        yield {'message': 'could not like repost ' + str(repost['id'])}
+                self.wait()
+                if not self.is_liked(post['id'], user_id=self.get_user_info()['id']):
+                    self.wait()
+                    self.add_like(post['id'])
+                    self.append_to_log_file('Liked original https://vk.com/wall-' + self.project.get_vk_group_id() + '_' + str(post['id']))
+                    iterations -= 1
+                    yield {'message': 'post ' + str(post['id']) + ' liked'}
+                else:
+                    yield {'message': 'post ' + str(post['id']) + ' checked'}
+        else:
+            yield {'message': 'Done'}
+
+    # Recursive function, that iterates from the oldest posts to the newest ones.
+    # Dangerous method. Better not use it, or risk to get banned due to lots of requests to API
+    def like_oldest_not_liked_posts(self, iterations=10, offset=0, checked=0):  # Like reposts as well. Reposts aren't taken into count
+        self.wait()
+        posts_count = self.get_posts(count=1, offset=0)['count']
+        if iterations > 0 and checked < posts_count:
+            if offset == 0:
+                if posts_count >= iterations:
+                    offset = posts_count - iterations
+                else:
+                    iterations = posts_count
+            posts = self.get_posts(search_filter="owner,others", offset=offset, count=iterations*3)['items']  # Take more 'count' than necessary to decrease number of calls to API
+            for post in posts:
+                #if post['id'] == 27: #PROD DEBUG: https://vk.com/wall-101124417_27
+                checked += 1
+                self.wait()
+                reposts = self.get_reposts(post['id'], random.randint(3, 7))
+                for repost in reposts:
+                    self.wait()
+                    try:
+                        if not self.is_liked(post_id=repost['id'], owner_id=str(repost['to_id']), user_id=self.get_user_info()['id']):
+                            self.wait(1.5)
+                            # print(repost)
+                            self.add_like(repost['id'], repost['to_id'])
+                            self.append_to_log_file('Liked repost https://vk.com/wall' + str(repost['to_id']) + '_' + str(repost['id']))
+                            yield {'message': 'repost ' + str(repost['id']) + ' liked'}
+                        else:
+                            yield {'message': 'repost ' + str(repost['id']) + ' checked'}
+                    except Exception as e:
+                        self.append_to_log_file('Error. Could not like repost https://vk.com/wall' + self.project.get_vk_group_id() + '_' + str(post['id']) + ' - probably, repost is private. Error: ' + str(e))
+                        yield {'message': 'could not like repost ' + str(repost['id'])}
+                self.wait()
+                if not self.is_liked(post['id'], user_id=self.get_user_info()['id']):
+                    self.wait()
+                    self.add_like(post['id'])
+                    self.append_to_log_file('Liked original https://vk.com/wall-' + self.project.get_vk_group_id() + '_' + str(post['id']))
+                    iterations -= 1
+                    yield {'message': 'post ' + str(post['id']) + ' liked(' + str(iterations) + ' more)'}
+                else:
+                    yield {'message': 'post ' + str(post['id']) + ' checked'}
+                print(str(iterations) + ' more iterations left')
+            if iterations > 0:
+                yield from self.like_oldest_not_liked_posts(iterations, offset-iterations, checked)
+        else:
+            yield {'message': 'Done'}
+
+    def wait(self, coefficient=1.0):
+        sleep(0.6*coefficient)  # Time in seconds. Max: 3/sec
 
     def get_post_difference(self):
         sql = """
@@ -54,6 +141,9 @@ class Autopost:
         cursor = self.__db.execute(sql)
         result = cursor.fetchone()
         return {'vk_post_count': result['vk_post_count'], 'telegram_post_count': result['telegram_post_count']}
+
+    def get_user_info(self):
+        return self.__api.users.get(access_token=self.__access_token, v=self.__v_api)[0]
 
     def get_group_info_by_id(self, group_id):
         method_url = 'https://api.vk.com/method/groups.getById?v='+self.__v_api
@@ -292,19 +382,22 @@ class Autopost:
                 )
         return response
 
-    def get_posts(self, search_filter="all", offset=0):
+    def get_posts(self, search_filter="all", offset=0, count=0):
         owner_id = str(-int(self.project.get_vk_group_id()))
         domain = "public" + self.project.get_vk_group_id()
-        if offset == (-1):  # Offset should be positive
+        if offset < 0:  # Offset should be positive
             offset = 0
-        return self.__api.wall.get(
-            owner_id=owner_id,
-            domain=domain,
-            filter=search_filter,
-            extended=1,
-            offset=offset,
-            v=self.__v_api
-        )
+        params = {
+            'owner_id': owner_id,
+            'domain': domain,
+            'filter': search_filter,
+            'extended': 1,
+            'offset': offset,
+            'v': self.__v_api
+        }
+        if count > 0:
+            params['count'] = count
+        return self.__api.wall.get(**params)
 
     def get_upload_image_link(self):
         method_url = 'https://api.vk.com/method/photos.getWallUploadServer?v='+self.__v_api
@@ -474,7 +567,7 @@ class Autopost:
         result = self.__db.execute(sql).fetchall()
 
         for post in result:
-            sleep(0.4)  # Time in seconds. Max: 3/sec
+            self.wait()
 
             if str(post['vk_post_id']).strip() != 0:
                 if self.delete_posts(post_id=post['vk_post_id']):
@@ -504,8 +597,7 @@ class Autopost:
                 else:
                     response['status'] = 0
                     response['message'] = "Error deleting post "+str(post['vk_post_id'])
-                with open(self.project.get_project_path() + '/' + self.project.get_name() + '_log.txt', 'a') as logfile:
-                    logfile.write(str(response['message']) + '\n')
+                self.append_to_log_file(str(response['message']))
             yield response
 
     def delete_posts(self, post_id=0, search_filter="postponed"):
@@ -521,11 +613,19 @@ class Autopost:
             while len(self.get_posts(search_filter)["items"]) > 0:
                 posts = self.get_posts(search_filter)["items"]
                 for post in posts:
-                    sleep(0.4)  # Time in seconds. Max: 3/sec
+                    self.wait()
                     response = self.__api.wall.delete(owner_id=owner_id, post_id=post["id"], v=self.__v_api)
                     if response == 1:
                         print("post "+str(post["id"])+" deleted")
                         return True
+
+    def get_log_file_path(self):
+        return self.project.get_project_path() + '/' + self.project.get_name() + '_log.txt'
+
+    def append_to_log_file(self, content):
+        with open(self.get_log_file_path(), 'a') as logfile:
+            if len(content.strip()):
+                logfile.write(datetime.now().strftime("%Y-%m-%d %H:%M") + ' ' + content + '\n')
 
     def create_data_activity_log(self, insert=None):
         if insert:
@@ -550,9 +650,23 @@ class Autopost:
                 sql = "INSERT INTO activity_log("+','.join(columns)+")"
                 sql += "VALUES("+','.join(values)+")"
                 self.__db.execute(sql)
-            with open(self.project.get_project_path() + '/' + self.project.get_name() + '_log.txt', 'a') as logfile:
-                logfile.write(json.dumps(insert) + '\n')
+            self.append_to_log_file(json.dumps(insert))
         return True
+
+    def get_reposts(self, post_id, count=20):
+        return self.__api.wall.getReposts(owner_id=str(-int(self.project.get_vk_group_id())), post_id=post_id, count=count, v=self.__v_api)['items']
+
+    def is_liked(self, post_id, owner_id='', user_id=''):
+        if owner_id == '':
+            owner_id = str(-int(self.project.get_vk_group_id()))
+        if user_id == '':
+            user_id = self.get_user_info()['id']
+        return self.__api.likes.isLiked(owner_id=owner_id, type="post", item_id=post_id, user_id=user_id, v=self.__v_api)['liked']
+
+    def add_like(self, post_id, owner_id=''):
+        if owner_id == '':  # Not a repost
+            owner_id = str(-int(self.project.get_vk_group_id()))
+        return self.__api.likes.add(access_token=self.__access_token, owner_id=owner_id, type="post", item_id=post_id, v=self.__v_api)
 
     def add_posts(self, scheduled=None, instant=None):
         planned_posts = []
