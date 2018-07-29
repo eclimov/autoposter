@@ -55,6 +55,8 @@ def create_folder(folder_path):
         return True
     return False
 
+def file_exists(file_path):
+    return path.exists(file_path)
 
 # Returns dictionary{'name', 'tags', 'extension'}
 def parse_image_name(image_full_name):

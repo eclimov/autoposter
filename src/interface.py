@@ -84,16 +84,17 @@ class Interface(tk.Tk):
 
         self.button_scheduled = tk.Button(self.toolbar, text="Scheduled", command=self.tab_scheduled)
         self.button_instant = tk.Button(self.toolbar, text="Instant", command=self.tab_instant)
+        self.button_giveaways = tk.Button(self.toolbar, text="Giveaways", command=self.tab_giveaways)
+
         self.button_scheduled.pack(side="left")
         self.button_instant.pack(side="left")
+        self.button_giveaways.pack(side="left")
 
         self.total_suggested = 0
         self.post_type = 1  # 1 - scheduled, 2- instant
         self.tab_scheduled()
 
     def project_init(self, project_name):
-        self.project.set_project(project_name)
-
         self.status_info_label.config(text="Loading...", fg="black")
 
         def callback():
@@ -102,7 +103,9 @@ class Interface(tk.Tk):
             if self.post_type == 1:  # Scheduled
                 self.disable_all_buttons_scheduled(True)
 
-            self.controller = autopost.Autopost(pname=self.project.get_name())
+            self.project.set_project(project_name)
+            self.controller = autopost.Autopost(self.project)
+            self.refresh_btn_giveaways_color()
 
             if self.post_type == 1:  # Scheduled
                 planned_posts = self.controller.get_auto_planned_posts()
@@ -140,6 +143,10 @@ class Interface(tk.Tk):
                 self.disable_all_buttons_scheduled(False)
             self.status_info_label.config(text="", fg="black")
             self.disable_all_buttons_common(False)
+
+            if self.post_type == 3:  # Giveaways
+                self.disable_post_button()
+                self.refresh_giveaway_info()
         t = threading.Thread(target=callback)
         t.start()
 
@@ -168,11 +175,16 @@ class Interface(tk.Tk):
         self.status_info_label.config(text=r'explorer /select,"'+sys.path[0]+'\\'+self.controller.get_log_file_path().replace('/', '\\')+'"')
         subprocess.Popen(r'explorer /select,"'+sys.path[0]+'\\'+self.controller.get_log_file_path().replace('/', '\\')+'"')
 
+    def disable_post_button(self, disable=True):
+        state = "disabled" if disable else "normal"
+        self.button_post.config(state=state)
+
     def disable_all_buttons_common(self, disable=True):
         state = "disabled" if disable else "normal"
         self.button_scheduled.config(state=state)
         self.button_instant.config(state=state)
-        self.button_post.config(state=state)
+        self.button_giveaways.config(state=state)
+        self.disable_post_button(disable)
         self.button_quit.config(state=state)
 
     def disable_all_buttons_scheduled(self, disable=True):
@@ -184,6 +196,13 @@ class Interface(tk.Tk):
     def disable_all_buttons_instant(self, disable=True):
         state = "disabled" if disable else "normal"
         self.disable_all_buttons_common(disable)
+
+    def disable_all_buttons_giveaways(self, disable=True):
+        state = "disabled" if disable else "normal"
+        self.disable_all_buttons_common(disable)
+        self.button_initiate_giveaway.config(state=state)
+        self.button_gift_add.config(state=state)
+        self.disable_post_button()
 
     def delete_all_planned(self):
         delete = False
@@ -216,6 +235,89 @@ class Interface(tk.Tk):
             for liked_post in self.controller.like_latest_not_liked_posts():
                 self.status_info_label.config(text=liked_post['message'], fg="black")
             self.disable_all_buttons_scheduled(False)
+        t = threading.Thread(target=callback)
+        t.start()
+
+    def refresh_btn_giveaways_color(self):
+        active_giveaways = self.controller.get_active_giveaways()
+        if not len(active_giveaways) or self.controller.get_active_giveaway_days_passed() > 7:
+            btn_giveaways_color = "#88ce46"
+        else:
+            btn_giveaways_color = "#ff7777"
+        self.button_giveaways.config(bg=btn_giveaways_color)
+
+    def refresh_giveaway_info(self):
+        active_giveaways = self.controller.get_active_giveaways()
+        if len(active_giveaways):
+            text = "Finish Giveaway"
+            self.button_initiate_giveaway.config(text=text, command=self.finish_giveaway, bg="#ff7777")
+            self.giveaway_days_passed_label.config(text=str(self.controller.get_active_giveaway_days_passed()) + " days passed")
+        else:
+            self.button_initiate_giveaway.config(text="Start Giveaway", command=self.start_giveaway, bg="#88ce46")
+            self.giveaway_days_passed_label.config(text="-")
+        active_gifts = self.controller.get_active_gifts()
+        self.giveaway_available_gifts_label.config(text="Gifts available: " + str(len(active_gifts)))
+        active_gifts = self.controller.get_active_gifts()
+        if len(active_gifts):
+            self.giveaway_next_game_label.config(text="Next game: " + str(active_gifts[0]['game_name']))
+        else:
+            self.giveaway_next_game_label.config(text="Next game: -")
+        self.giveaways_total_passed_label.config(text="Giveaways finished: " + str(len(self.controller.get_past_giveaways())))
+        self.refresh_btn_giveaways_color()
+
+    def add_giveaway_gift(self):
+        key = (self.giveaway_key_input.get()).strip()
+        if len(key):
+            game_name = (self.giveaway_game_input.get()).strip()
+            if len(game_name):
+                def callback():
+                    self.disable_all_buttons_giveaways(True)
+                    response = self.controller.add_gift_key(key, game_name)
+                    if response['status']:
+                        self.refresh_giveaway_info()
+                        self.status_info_label.config(text=response['message'], fg="green")
+                        self.giveaway_key_input.delete(0, 'end')
+                        self.giveaway_game_input.delete(0, 'end')
+                    else:
+                        self.status_info_label.config(text=response['message'], fg="red")
+                    self.disable_all_buttons_giveaways(False)
+                t = threading.Thread(target=callback)
+                t.start()
+            else:
+                self.giveaway_game_input.focus()
+                self.status_info_label.config(text="Insert game name", fg="red")
+        else:
+            self.giveaway_key_input.focus()
+            self.status_info_label.config(text="Insert key", fg="red")
+        return
+
+    def start_giveaway(self):
+        if self.confirm("Start new giveaway?"):
+            def callback():
+                self.disable_all_buttons_giveaways(True)
+                result = self.controller.start_giveaway()
+                if result['status']:
+                    self.status_info_label.config(text=result['message'], fg="green")
+                else:
+                    self.status_info_label.config(text=result['message'], fg="red")
+                self.refresh_giveaway_info()
+                self.disable_all_buttons_giveaways(False)
+            t = threading.Thread(target=callback)
+            t.start()
+
+    def finish_giveaway(self):
+        days_passed = self.controller.get_active_giveaway_days_passed()
+        if days_passed < 7 and not self.confirm("Only " + str(days_passed) + " days have passed.\nAre you sure you want to finish the giveaway?"):
+            return
+        def callback():
+            self.disable_all_buttons_giveaways(True)
+            result = self.controller.finish_giveaway()
+            if result['status']:
+                self.status_info_label.config(text=result['message'], fg="green")
+            else:
+                self.status_info_label.config(text=result['message'], fg="red")
+            self.refresh_giveaway_info()
+            self.disable_all_buttons_giveaways(False)
         t = threading.Thread(target=callback)
         t.start()
 
@@ -564,6 +666,95 @@ class Interface(tk.Tk):
 
         self.project_init(self.project.get_name())
         self.disable_checkboxes()
+
+    def tab_giveaways(self):
+        try:
+            self.forms_frame.destroy()
+        except Exception as e:
+            print('*' + str(e) + '*')
+            pass
+        self.post_type = 3
+        self.forms_frame = tk.Frame(self, borderwidth=2, relief="groove")
+        self.forms_frame.pack(side="top", fill="both", expand="True", padx=2, pady=2)
+
+        forms = []
+        frame_info = tk.LabelFrame(self.forms_frame, text="Info", bg="white")
+        forms.append(frame_info)
+        forms[-1].grid(column=0, row=0, padx=4, pady=2, sticky="ew")
+
+        self.giveaways_total_passed_label = tk.Label(
+            frame_info,
+            bg="white",
+            font="Arial 8", anchor="w"
+        )
+        self.giveaways_total_passed_label.pack(side="top", fill="both", padx=(10, 10), expand=True)
+
+        self.giveaway_available_gifts_label = tk.Label(
+            frame_info,
+            bg="white",
+            font="Arial 8", anchor="w"
+        )
+        self.giveaway_available_gifts_label.pack(side="top", fill="both", padx=(10, 10), expand=True)
+
+        self.giveaway_next_game_label = tk.Label(
+            frame_info,
+            bg="white",
+            font="Arial 8", anchor="w"
+        )
+        self.giveaway_next_game_label.pack(side="top", fill="both", padx=(10, 10), expand=True)
+
+        self.giveaway_days_passed_label = tk.Label(
+            frame_info,
+            bg="white",
+            font="Arial 8", anchor="w"
+        )
+        self.giveaway_days_passed_label.pack(side="top", fill="both", padx=(10, 10), expand=True)
+
+        self.button_initiate_giveaway = tk.Button(
+            frame_info,
+            text="loading...",
+            font="Arial 8"
+        )
+        self.button_initiate_giveaway.pack(side="right", padx=(10, 10), pady=(0, 10), fill="both", expand=True)
+
+
+        self.frame_add_gift = tk.LabelFrame(self.forms_frame, text="Add gift", bg="white")
+        forms.append(self.frame_add_gift)
+        forms[-1].grid(column=1, row=0, padx=4, pady=2, sticky="ew")
+        self.giveaway_key_label = tk.Label(
+            self.frame_add_gift,
+            text="Key",
+            bg="white",
+            font="Arial 6",
+            anchor="w"
+        )
+        self.giveaway_key_label.pack(side="top", padx=(10, 10), fill="both", expand=True)
+        self.giveaway_key_input = tk.Entry(self.frame_add_gift, width="28")
+        self.giveaway_key_input.pack(side="top", padx=(10, 10), fill="both", expand=True)
+
+        self.giveaway_game_label = tk.Label(
+            self.frame_add_gift,
+            text="Game name",
+            bg="white",
+            font="Arial 6",
+            anchor="w"
+        )
+        self.giveaway_game_label.pack(side="top", padx=(10, 10), fill="both", expand=True)
+        self.giveaway_game_input = tk.Entry(self.frame_add_gift, width="28")
+        self.giveaway_game_input.pack(side="top", padx=(10, 10), fill="both", expand=True)
+
+        self.button_gift_add = tk.Button(
+            self.frame_add_gift,
+            bg="#f7a642",
+            text="Add",
+            font="Arial 8",
+            command=self.add_giveaway_gift
+        )
+        self.button_gift_add.pack(side="top", padx=(10, 10), pady=(10, 10), fill="both", expand=True)
+
+        self.project_init(self.project.get_name())
+
+
 
     def quit(self):
         sys.exit()

@@ -12,6 +12,9 @@ from file_control import *
 import random
 from Project import Project
 from pathlib import Path
+from PIL import Image
+from PIL import ImageFont
+from PIL import ImageDraw
 
 
 class Autopost:
@@ -22,9 +25,8 @@ class Autopost:
     # chars to exclude from filename
     __FORBIDDEN_CHARS = '/\\\?%*:|"<>!'
 
-    def __init__(self, pname):
-        self.project = Project()
-        self.project.set_project(pname)
+    def __init__(self, project):
+        self.project = project
 
         # Create folder structure
         print("Checking folder structure...")
@@ -44,7 +46,258 @@ class Autopost:
         self.__v_api = "5.57"
         self.__access_token, _ = self.get_auth_params()
         self.__api = self.get_api(self.__access_token)
-        #self.__watermarker = watermarker.Watermarker('assets/watermark_'+pname+'.png', pname + '/notWatermarkedArchive/')
+        #self.__watermarker = watermarker.Watermarker('assets/watermark_'+self.project.get_name()+'.png', self.project.get_name() + '/notWatermarkedArchive/')
+
+    def get_active_gifts(self, limit=0):
+        response = []
+
+        sql = """
+            SELECT 
+                id,
+                gift_key,
+                game_name
+            FROM gift_keys
+            WHERE is_active = 1
+            ORDER BY id
+        """
+        if limit > 0:
+            sql += 'LIMIT 1'
+
+        result = self.__db.execute(sql).fetchall()
+        if len(result):
+            for gifts in result:
+                response.append(
+                    {
+                        'id': gifts['id'],
+                        'gift_key': gifts['gift_key'],
+                        'game_name': gifts['game_name']
+                    }
+                )
+        return response
+
+    def get_gift_key(self, key):
+        sql = """
+            SELECT id, game_name
+            FROM gift_keys
+            WHERE gift_key = '""" + key + """'
+        """
+        result = self.__db.execute(sql).fetchall()
+        return result
+
+    def add_gift_key(self, key, game_name):
+        existing_gift = self.get_gift_key(key)
+        if not existing_gift:
+            sql = """
+                INSERT INTO gift_keys (gift_key, game_name) 
+                VALUES (
+                    '""" + key + """', 
+                    '""" + game_name + """'
+                )
+            """
+            cursor = self.__db.execute(sql)
+            print('New game key added in DB: "' + game_name + '", id=' + str(cursor.lastrowid))
+            self.append_to_log_file('New game key added in DB: "' + game_name + '", id=' + str(cursor.lastrowid))
+            return {'status': 1, 'message': 'Gift added(' + str(cursor.lastrowid) + ')'}
+        else:
+            return {'status': 0, 'message': 'Key already exists(' + existing_gift[0]['game_name'] + ')'}
+
+    def gift_key_deactivate(self, key_id):
+        sql = """
+            UPDATE gift_keys
+            SET is_active = 0
+            WHERE id = """ + str(key_id) + """
+        """
+        self.__db.execute(sql)
+        return True
+
+    def get_past_giveaways(self):
+        response = []
+
+        sql = """
+            SELECT g.id
+            FROM giveaways g
+            WHERE when_ended IS NOT NULL
+            ORDER BY g.id DESC
+        """
+        result = self.__db.execute(sql).fetchall()
+        if len(result):
+            for giveaway in result:
+                response.append({'id': giveaway['id']})
+        return response
+
+    def get_active_giveaways(self):
+        response = []
+        sql = """
+            SELECT 
+                g.id,
+                g.vk_post_id,
+                g.telegram_post_id,
+                g.when_started
+            FROM 
+                giveaways g
+            WHERE when_ended IS NULL
+        """
+        result = self.__db.execute(sql).fetchall()
+        if len(result):
+            for giveaway in result:
+                response.append(
+                    {
+                        'id': giveaway['id'],
+                        'vk_post_id': giveaway['vk_post_id'],
+                        'telegram_post_id': giveaway['when_started'],
+                        'when_started': giveaway['when_started']
+                    }
+                )
+        return response
+
+    def get_active_giveaway_days_passed(self):
+        active_giveaways = self.get_active_giveaways()
+        if len(active_giveaways):
+            return (datetime.now() - datetime.strptime(active_giveaways[0]['when_started'], "%Y-%m-%d %H:%M:%S")).days
+        return 0
+
+    def get_giveaway_number(self):
+        return len(self.get_past_giveaways()) + 1
+
+    def get_giveaway_text(self):
+        giveaway_text = self.generate_tags_string(['раздача', 'игра', 'ключ', 'подарок']) + '\n'
+        giveaway_text += 'Раздача №' + str(self.get_giveaway_number()) + '!\n'
+        giveaway_text += 'Правила те же: для участия достаточно поставить лайк, но репост увеличит шансы на победу в 3 раза.\n'
+        giveaway_text += 'Победитель получит игру из нашего фонда. Результат будет объявлен в течение недели.\n'
+        giveaway_text += 'Спасибо, что вы с нами! ;)'
+
+        return giveaway_text
+
+    def get_giveaway_image_path(self):
+        return 'assets/giveaway_tmp.png'
+
+    def generate_giveaway_image(self):
+        img = Image.open('assets/giveaway.png', 'r')
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype("assets/font_hashtag.ttf", 120)
+        draw.text((35, 15), "#"+str(self.get_giveaway_number()), (255, 159, 15), font=font)
+        img.save(self.get_giveaway_image_path())
+
+        while not file_exists(self.get_giveaway_image_path()):
+            self.wait(2)  # Creating image take a while
+
+        return self.get_giveaway_image_path()
+
+    def remove_giveaway_image(self):
+        delete_file(self.get_giveaway_image_path())
+
+    def start_giveaway(self):
+        if len(self.get_active_gifts()):
+            if not len(self.get_active_giveaways()):
+                giveaway_text = self.get_giveaway_text()
+                giveaway_image = self.generate_giveaway_image()
+
+                prepared_vk_attachment = self.prepare_vk_attachment_img(giveaway_image)
+                vk_post_id = self.vk_post({
+                    'owner_id': str(-int(self.project.get_vk_group_id())),
+                    'attachments': prepared_vk_attachment,
+                    'message': giveaway_text
+                })
+                print(vk_post_id)
+                self.wait()
+                self.vk_pin(vk_post_id)
+
+                sql = """
+                    INSERT INTO giveaways (vk_post_id) 
+                    VALUES (
+                        """ + str(vk_post_id) + """
+                    )
+                """
+                self.__db.execute(sql)
+
+                self.append_to_log_file('New giveaway started: https://vk.com/wall' + self.project.get_vk_group_id() + '_' + str(vk_post_id))
+                self.remove_giveaway_image()
+
+                return {'status': 1, 'message': 'New giveaway started'}
+            else:
+                return {'status': 0, 'message': 'Previous giveaway not finished'}
+        else:
+            return {'status': 0, 'message': 'No more gifts available'}
+
+    def get_giveaway_winner(self, vk_post_id):
+        reposts = self.get_reposts(vk_post_id)
+        candidates = []
+        for repost in reposts:
+            if '-' not in str(repost['to_id']):
+                # Append 3 times, because chances of win is 3x for users who reposted
+                candidates.append(repost['to_id'])
+                candidates.append(repost['to_id'])
+                candidates.append(repost['to_id'])
+        self.wait()
+        likes = self.get_likes(vk_post_id)
+        for like in likes:
+            if '-' not in str(like):
+                candidates.append(like)
+        random.shuffle(candidates)  # Shuffle the array
+
+        except_users = ['74472774', '47444839', '38730316']  # Except admins
+        for candidate in candidates:
+            if str(candidate) not in except_users:
+                self.wait()
+                # Try to write a message to the user. otherwise, try picking another one
+                try:
+                    self.vk_send_message(user_id=candidate, message="Привет")
+                    return candidate
+                except Exception as e:
+                    print("Can't write a message to user " + str(candidate) + ". Error: " + str(e))
+                    self.append_to_log_file("Can't write a message to user " + str(candidate))
+        return None
+
+    def generate_giveaway_winner_message(self, vk_post_id, gift_key):
+        message = 'Вы выиграли в нашей раздаче:\n'
+        message += 'https://vk.com/wall' + str(-int(self.project.get_vk_group_id())) + '_' + str(vk_post_id) + '\n'
+        message += 'Ваш приз: ' + str(gift_key) + '\n'
+        message += 'Поздравляем. Спасибо за участие! :)'
+        return message
+
+    def finish_giveaway(self):
+        gift = self.get_active_gifts(limit=1)
+        if len(gift):
+            gift = gift[0]
+
+            giveaway = self.get_active_giveaways()
+            if len(giveaway):
+                giveaway = giveaway[0]
+                winner_id = self.get_giveaway_winner(giveaway['vk_post_id'])
+
+                if winner_id:
+                    self.wait()
+                    self.vk_send_message(user_id=winner_id, message=self.generate_giveaway_winner_message(giveaway['vk_post_id'], gift['gift_key']))
+
+                    sql = """
+                        UPDATE giveaways
+                        SET 
+                            gift_key_id = """ + str(gift['id']) + """,
+                            winner_id = """ + str(winner_id) + """,
+                            when_ended = DateTime('now', 'localtime')
+                        WHERE id=""" + str(giveaway['id']) + """
+                    """
+                    self.__db.execute(sql)
+
+                    self.gift_key_deactivate(key_id=gift['id'])
+
+                    self.wait()
+                    self.vk_unpin(giveaway['vk_post_id'])
+
+                    user = self.get_user_info(winner_id)
+                    message = 'Победитель предыдущей раздачи - [id' + str(user['id']) + '|' + str(user['first_name']) + ' ' + str(user['last_name']) + ']\n'
+                    message += 'Спасибо, что вы с нами! ;)'
+                    self.vk_post({
+                        'owner_id': str(-int(self.project.get_vk_group_id())),
+                        'message': message
+                    })
+                    return {'status': 1, 'message': 'Ok. The winner got "' + str(gift['game_name']) + '"'}
+                else:
+                    return {'status': 0, 'message': 'Could not generate winner'}
+            else:
+                return {'status': 0, 'message': 'There is no active giveaway at the moment'}
+        else:
+            return {'status': 0, 'message': 'No more gifts available'}
 
     def like_latest_not_liked_posts(self, iterations=10):  # Like reposts as well. Reposts aren't taken into count
         posts_count = self.get_posts(count=1, offset=0)['count']
@@ -80,6 +333,15 @@ class Autopost:
                     yield {'message': 'post ' + str(post['id']) + ' checked'}
         else:
             yield {'message': 'Done'}
+
+    def vk_send_message(self, user_id, message):
+        return self.__api.messages.send(access_token=self.__access_token, user_id=user_id, message=message, v=self.__v_api)
+
+    def vk_pin(self, post_id):
+        return self.__api.wall.pin(access_token=self.__access_token, owner_id=str(-int(self.project.get_vk_group_id())), post_id=post_id, v=self.__v_api)
+
+    def vk_unpin(self, post_id):
+        return self.__api.wall.unpin(access_token=self.__access_token, owner_id=str(-int(self.project.get_vk_group_id())), post_id=post_id, v=self.__v_api)
 
     # Recursive function, that iterates from the oldest posts to the newest ones.
     # Dangerous method. Better not use it, or risk to get banned due to lots of requests to API
@@ -142,7 +404,9 @@ class Autopost:
         result = cursor.fetchone()
         return {'vk_post_count': result['vk_post_count'], 'telegram_post_count': result['telegram_post_count']}
 
-    def get_user_info(self):
+    def get_user_info(self, user_ids=''):
+        if len(str(user_ids)):
+            return self.__api.users.get(access_token=self.__access_token, user_ids=user_ids, v=self.__v_api)[0]
         return self.__api.users.get(access_token=self.__access_token, v=self.__v_api)[0]
 
     def get_group_info_by_id(self, group_id):
@@ -653,6 +917,9 @@ class Autopost:
             self.append_to_log_file(json.dumps(insert))
         return True
 
+    def get_likes(self, post_id):
+        return self.__api.likes.getList(type="post", owner_id=str(-int(self.project.get_vk_group_id())), item_id=post_id, filter="likes", v=self.__v_api)['items']
+
     def get_reposts(self, post_id, count=20):
         return self.__api.wall.getReposts(owner_id=str(-int(self.project.get_vk_group_id())), post_id=post_id, count=count, v=self.__v_api)['items']
 
@@ -819,16 +1086,7 @@ class Autopost:
                             else:
                                 img_path = post['image']['image_path']
                             if post['vk_args']:
-                                with open(img_path, 'rb') as file:
-                                    img = {'photo': (img_path, file)}
-                                    # Получаем ссылку для загрузки изображений
-                                    upload_url = self.get_upload_image_link()
-                                    # Загружаем изображение на url
-                                    result = self.upload_image(upload_url, img)
-                                    # Сохраняем фото на сервере и получаем id
-                                    result = self.save_image_on_server(result)
-                                    post['vk_args']['attachments'] = result
-
+                                post['vk_args']['attachments'] = self.prepare_vk_attachment_img(img_path)
                             if post['telegram_args']:
                                 post['telegram_args']['image_path'] = img_path
                         else:
@@ -840,8 +1098,7 @@ class Autopost:
 
             return_data = {}
             if post['vk_args']:
-                post['vk_args']['v'] = '5.60'
-                post_id = (self.__api.wall.post(**post['vk_args']))['post_id']  # post_id
+                post_id = self.vk_post(post['vk_args'])
                 activity_log_args['vk_post_id'] = str(post_id)
                 if post['telegram_args'] and (is_instant and 'with_vk_link' in instant and instant['with_vk_link'] == 1): #Is customized instant
                     post['telegram_args']['url'] = 'https://vk.com/public' + self.project.get_vk_group_id() + '?w=wall-' + self.project.get_vk_group_id() + '_' + str(post_id)
@@ -879,6 +1136,21 @@ class Autopost:
                     delete_file(self.project.get_img_path_working() + '/' + "temp." + post['image']['extension'])
 
             yield return_data
+
+    def prepare_vk_attachment_img(self, img_path):
+        with open(img_path, 'rb') as file:
+            img = {'photo': (img_path, file)}
+            # Получаем ссылку для загрузки изображений
+            upload_url = self.get_upload_image_link()
+            # Загружаем изображение на url
+            result = self.upload_image(upload_url, img)
+            # Сохраняем фото на сервере и получаем id
+            result = self.save_image_on_server(result)
+            return result
+
+    def vk_post(self, args):
+        args['v'] = '5.60'
+        return (self.__api.wall.post(**args))['post_id']  # post_id
 
     def telegram_post(self, text='', image_path='', image_urls=None, url=''):
         if image_urls is None:

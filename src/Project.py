@@ -64,8 +64,10 @@ class Project:
         if len(self.projects):
             self.project = self.projects[0]
 
-        # Creating the table if it doesn't exist
         self.__db = self.get_db()
+
+    def init_project_schema(self):
+        # Creating the table if it doesn't exist
         sql_init_images = """
             CREATE TABLE IF NOT EXISTS """+self.get_name()+""" (
                 id                  INTEGER         PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
@@ -92,6 +94,32 @@ class Project:
         """
         self.__db.execute(sql_init_log)
 
+        # Creating gift keys' table if it doesn't exist
+        sql_init_gift_keys = """
+            CREATE TABLE IF NOT EXISTS gift_keys (
+                id                  INTEGER PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
+                gift_key            VARCHAR(40),
+                game_name           VARCHAR(200),
+                when_added          DATETIME DEFAULT (DateTime('now', 'localtime')) NOT NULL,
+                is_active           INTEGER DEFAULT (1) NOT NULL
+            );
+        """
+        self.__db.execute(sql_init_gift_keys)
+
+        # Creating giveaways' table if it doesn't exist
+        sql_init_giveaways = """
+            CREATE TABLE IF NOT EXISTS giveaways (
+                id                  INTEGER PRIMARY KEY ASC AUTOINCREMENT UNIQUE NOT NULL,
+                gift_key_id         INTEGER,
+                vk_post_id          INTEGER,
+                telegram_post_id    INTEGER,
+                winner_id           INTEGER,
+                when_started        DATETIME DEFAULT (DateTime('now', 'localtime')) NOT NULL,
+                when_ended          DATETIME
+            );
+        """
+        self.__db.execute(sql_init_giveaways)
+
     def get_projects(self):
         return self.projects
 
@@ -105,6 +133,8 @@ class Project:
         for pr in self.projects:
             if pr['project_name'] == project_name:
                 self.project = pr
+                self.__db = self.get_db()
+                self.init_project_schema()
                 return True
         print("Project with name "+project_name+" does not exist")
         return False
