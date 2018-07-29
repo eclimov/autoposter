@@ -228,7 +228,6 @@ class Autopost:
                 candidates.append(repost['to_id'])
                 candidates.append(repost['to_id'])
                 candidates.append(repost['to_id'])
-        self.wait()
         likes = self.get_likes(vk_post_id)
         for like in likes:
             if '-' not in str(like):
@@ -307,10 +306,8 @@ class Autopost:
             self.wait()
             posts = self.get_posts(search_filter="owner,others", count=iterations)['items']
             for post in posts:  # Pinned post goes the first
-                self.wait()
                 reposts = self.get_reposts(post['id'], random.randint(7, 13))
                 for repost in reposts:
-                    self.wait()
                     try:
                         if not self.is_liked(post_id=repost['id'], owner_id=str(repost['to_id']), user_id=self.get_user_info()['id']):
                             self.wait(1.5)
@@ -322,7 +319,6 @@ class Autopost:
                     except Exception as e:
                         self.append_to_log_file('Error. Could not like repost https://vk.com/wall' + self.project.get_vk_group_id() + '_' + str(post['id']) + ' - probably, repost is private. Error: ' + str(e))
                         yield {'message': 'could not like repost ' + str(repost['id'])}
-                self.wait()
                 if not self.is_liked(post['id'], user_id=self.get_user_info()['id']):
                     self.wait()
                     self.add_like(post['id'])
@@ -358,10 +354,8 @@ class Autopost:
             for post in posts:
                 #if post['id'] == 27: #PROD DEBUG: https://vk.com/wall-101124417_27
                 checked += 1
-                self.wait()
                 reposts = self.get_reposts(post['id'], random.randint(3, 7))
                 for repost in reposts:
-                    self.wait()
                     try:
                         if not self.is_liked(post_id=repost['id'], owner_id=str(repost['to_id']), user_id=self.get_user_info()['id']):
                             self.wait(1.5)
@@ -374,7 +368,6 @@ class Autopost:
                     except Exception as e:
                         self.append_to_log_file('Error. Could not like repost https://vk.com/wall' + self.project.get_vk_group_id() + '_' + str(post['id']) + ' - probably, repost is private. Error: ' + str(e))
                         yield {'message': 'could not like repost ' + str(repost['id'])}
-                self.wait()
                 if not self.is_liked(post['id'], user_id=self.get_user_info()['id']):
                     self.wait()
                     self.add_like(post['id'])
@@ -918,12 +911,15 @@ class Autopost:
         return True
 
     def get_likes(self, post_id):
+        self.wait()
         return self.__api.likes.getList(type="post", owner_id=str(-int(self.project.get_vk_group_id())), item_id=post_id, filter="likes", v=self.__v_api)['items']
 
     def get_reposts(self, post_id, count=20):
+        self.wait()
         return self.__api.wall.getReposts(owner_id=str(-int(self.project.get_vk_group_id())), post_id=post_id, count=count, v=self.__v_api)['items']
 
     def is_liked(self, post_id, owner_id='', user_id=''):
+        self.wait()
         if owner_id == '':
             owner_id = str(-int(self.project.get_vk_group_id()))
         if user_id == '':
@@ -1149,6 +1145,7 @@ class Autopost:
             return result
 
     def vk_post(self, args):
+        self.wait()
         args['v'] = '5.60'
         return (self.__api.wall.post(**args))['post_id']  # post_id
 
