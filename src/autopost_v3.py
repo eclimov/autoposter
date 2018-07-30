@@ -91,7 +91,7 @@ class Autopost:
                 INSERT INTO gift_keys (gift_key, game_name) 
                 VALUES (
                     '""" + key + """', 
-                    '""" + game_name + """'
+                    '""" + game_name.replace("'", '`') + """'
                 )
             """
             cursor = self.__db.execute(sql)
