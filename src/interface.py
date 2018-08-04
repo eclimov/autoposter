@@ -85,6 +85,7 @@ class Interface(tk.Tk):
         self.button_scheduled = tk.Button(self.toolbar, text="Scheduled", command=self.tab_scheduled)
         self.button_instant = tk.Button(self.toolbar, text="Instant", command=self.tab_instant)
         self.button_giveaways = tk.Button(self.toolbar, text="Giveaways", command=self.tab_giveaways)
+        self.giveaway_acceptable_range = 5  # Acceptable number of a giveaway's days passed to finish current and start a new one
 
         self.button_scheduled.pack(side="left")
         self.button_instant.pack(side="left")
@@ -240,7 +241,7 @@ class Interface(tk.Tk):
 
     def refresh_btn_giveaways_color(self):
         active_giveaways = self.controller.get_active_giveaways()
-        if not len(active_giveaways) or self.controller.get_active_giveaway_days_passed() > 7:
+        if not len(active_giveaways) or self.controller.get_active_giveaway_days_passed() > self.giveaway_acceptable_range:
             btn_giveaways_color = "#88ce46"
         else:
             btn_giveaways_color = "#ff7777"
@@ -307,7 +308,7 @@ class Interface(tk.Tk):
 
     def finish_giveaway(self):
         days_passed = self.controller.get_active_giveaway_days_passed()
-        if days_passed < 7 and not self.confirm("Only " + str(days_passed) + " days have passed.\nAre you sure you want to finish the giveaway?"):
+        if days_passed < self.giveaway_acceptable_range and not self.confirm("Only " + str(days_passed) + " days have passed.\nAre you sure you want to finish the giveaway?"):
             return
         def callback():
             self.disable_all_buttons_giveaways(True)
