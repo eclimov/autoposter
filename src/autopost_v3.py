@@ -224,7 +224,7 @@ class Autopost:
         candidates = []
         for repost in reposts:
             if '-' not in str(repost['to_id']):
-                # Append 3 times, because chances of win is 3x for users who reposted
+                # Append 3 times, because chances of win is 3x for users who have reposted
                 candidates.append(repost['to_id'])
                 candidates.append(repost['to_id'])
                 candidates.append(repost['to_id'])

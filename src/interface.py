@@ -241,7 +241,7 @@ class Interface(tk.Tk):
 
     def refresh_btn_giveaways_color(self):
         active_giveaways = self.controller.get_active_giveaways()
-        if not len(active_giveaways) or self.controller.get_active_giveaway_days_passed() > self.giveaway_acceptable_range:
+        if not len(active_giveaways) or self.controller.get_active_giveaway_days_passed() >= self.giveaway_acceptable_range:
             btn_giveaways_color = "#88ce46"
         else:
             btn_giveaways_color = "#ff7777"
