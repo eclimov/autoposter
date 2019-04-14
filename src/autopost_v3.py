@@ -245,6 +245,7 @@ class Autopost:
                 except Exception as e:
                     print("Can't write a message to user " + str(candidate) + ". Error: " + str(e))
                     self.append_to_log_file("Can't write a message to user " + str(candidate))
+                    self.append_to_log_file(str(e))
         return None
 
     def generate_giveaway_winner_message(self, vk_post_id, gift_key):
