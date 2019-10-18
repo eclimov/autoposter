@@ -921,14 +921,14 @@ class Autopost:
 
     def is_liked(self, post_id, owner_id='', user_id=''):
         self.wait()
-        if owner_id == '':
+        if not owner_id:
             owner_id = str(-int(self.project.get_vk_group_id()))
-        if user_id == '':
+        if not user_id:
             user_id = self.get_user_info()['id']
         return self.__api.likes.isLiked(owner_id=owner_id, type="post", item_id=post_id, user_id=user_id, v=self.__v_api)['liked']
 
     def add_like(self, post_id, owner_id=''):
-        if owner_id == '':  # Not a repost
+        if not owner_id:  # Not a repost
             owner_id = str(-int(self.project.get_vk_group_id()))
         return self.__api.likes.add(access_token=self.__access_token, owner_id=owner_id, type="post", item_id=post_id, v=self.__v_api)
 
@@ -1128,7 +1128,7 @@ class Autopost:
                 else:
                     self.create_data_activity_log(activity_log_args)
 
-            if 'image' in post and post['image'] != '':
+            if 'image' in post and post['image']:
                 if not is_english(post['image']['image_path']):
                     delete_file(self.project.get_img_path_working() + '/' + "temp." + post['image']['extension'])
 
@@ -1155,10 +1155,10 @@ class Autopost:
             image_urls = []
 
         # If at least one parameter given
-        if text.strip() != '' or image_path.strip() != '' or url.strip() != '' or len(image_urls):
+        if text.strip() or image_path.strip() or url.strip() or len(image_urls):
             text = text.strip()
             image_path = image_path.strip()
-            if text == '' and image_path == '' and len(image_urls) == 0:
+            if not text and not image_path and len(image_urls) == 0:
                 print("No text or image given")
                 return
 
@@ -1174,7 +1174,7 @@ class Autopost:
 
             from json import JSONEncoder
 
-            if url.strip() != '':
+            if url.strip():
                 emojis = [
                     u'\U0001f300',  # Thumbs up
                     u'\U0001f300',  # Cyclone
@@ -1203,7 +1203,7 @@ class Autopost:
                     ]
                 })
 
-            if image_path.strip() == '' and len(image_urls) == 0:
+            if not image_path.strip() and len(image_urls) == 0:
                 method = "sendMessage"
                 args['data']['text'] = text
             else:
@@ -1221,7 +1221,7 @@ class Autopost:
                         )
                     args['data']['media'] = JSONEncoder().encode(media)
                 else:
-                    method = "sendPhoto" + ("?caption=" + text if text != '' else '')
+                    method = "sendPhoto" + ("?caption=" + text if text else '')
                     args['files'] = {'photo': open(image_path, 'rb')}
             url = "https://api.telegram.org/bot" + self.project.get_telegram_bot_token() + "/" + method
 

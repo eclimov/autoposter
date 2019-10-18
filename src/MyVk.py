@@ -136,7 +136,7 @@ def generate_image_description(folder, image_full_name):
             image_tags.remove(tag2)
             tag2 = " #" + tag2
     tags = '#' + folder + ' ' + tag1 + tag2
-    # description_text = "\n" + "Просто текст..."
+    # description_text = "\n" + "Just text..."
     image_description = tags
     return image_description
 
@@ -172,16 +172,17 @@ def get_folders(unused_folder, used_folder, new_folder):
 def get_datetime_starting_point(api, gid):
     owner_id = str(-int(gid))
     domain = "public"+gid
-    filter = "postponed"
+    post_filter = "postponed"
     v = 5.58
 
-    response = api.wall.get(owner_id=owner_id, domain=domain, filter=filter, v=v)
+    response = api.wall.get(owner_id=owner_id, domain=domain, filter=post_filter, v=v)
     if response['count']: #If there are planned posts, use next day after the last planned date
         last_post = response['items'][response['count']-1]
         last_post_datetime = datetime.fromtimestamp(last_post['date'])
     else: #Else - use tomorrow's date
         last_post_datetime = datetime.now()
     return last_post_datetime + timedelta(days=1)  # Next day from last planned post
+
 
 def get_posts_time(api, gid, total, perDay):
     datetime_to_post = get_datetime_starting_point(api, gid) #Starting datetime point
@@ -253,14 +254,14 @@ def add_posts(app_id, gid, folder, total, perDay):
         if image_name.find('.gif') == -1:
             with open(img_path, 'rb') as file:
                 img = {'photo': (img_path, file)}
-                # Получаем ссылку для загрузки изображений
+                # Getting link for uploading images
                 upload_url = get_upload_image_link(access_token, img, gid)
-                # Загружаем изображение на url
+                # Uploading images to URL
                 result = upload_image(upload_url, img)
-                # Сохраняем фото на сервере и получаем id
+                # Saving images on a server
                 result = save_image_on_server(access_token, gid, result)
 
-            # Перемещаем изображение в папку с использованными
+            # Moving images in a folder with currents
             move_img(img_unused_folder, img_used_folder, image_name)
         else:
             print("'gif' file can't be uploaded\n")

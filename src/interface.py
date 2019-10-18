@@ -310,6 +310,7 @@ class Interface(tk.Tk):
         days_passed = self.controller.get_active_giveaway_days_passed()
         if days_passed < self.giveaway_acceptable_range and not self.confirm("Only " + str(days_passed) + " days have passed.\nAre you sure you want to finish the giveaway?"):
             return
+
         def callback():
             self.disable_all_buttons_giveaways(True)
             result = self.controller.finish_giveaway()
@@ -754,8 +755,6 @@ class Interface(tk.Tk):
         self.button_gift_add.pack(side="top", padx=(10, 10), pady=(10, 10), fill="both", expand=True)
 
         self.project_init(self.project.get_name())
-
-
 
     def quit(self):
         sys.exit()
