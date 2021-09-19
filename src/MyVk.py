@@ -65,7 +65,7 @@ def get_auth_params(APP_ID):
                 "&redirect_uri=https://oauth.vk.com/blank.html"
                 "&scope=notify,friends,photos,audio,video,docs,notes,pages,status,offers,questions,wall,groups,messages,notifications,stats,ads,offline"
                 "&client_secret=B1ESDOkPPNa9Mxootnb0"
-                "&display=popup&response_type=token&v=5.60".format(app_id=APP_ID))
+                "&display=popup&response_type=token&v=5.81".format(app_id=APP_ID))
     webbrowser.open_new_tab(auth_url)
     redirected_url = input("Paste here url you were redirected:\n")
     aup = parse_qs(redirected_url)
@@ -173,7 +173,7 @@ def get_datetime_starting_point(api, gid):
     owner_id = str(-int(gid))
     domain = "public"+gid
     filter = "postponed"
-    v = 5.58
+    v = 5.81
 
     response = api.wall.get(owner_id=owner_id, domain=domain, filter=filter, v=v)
     if response['count']: #If there are planned posts, use next day after the last planned date

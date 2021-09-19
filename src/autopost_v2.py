@@ -210,7 +210,7 @@ class Autopost:
                         "&redirect_uri=https://oauth.vk.com/blank.html"
                         "&scope=notify,friends,photos,audio,video,docs,notes,pages,status,offers,questions,wall,groups,messages,notifications,stats,ads,offline"
                         "&client_secret=*************"
-                        "&display=popup&response_type=token&v=5.60".format(app_id=self.__app_id))
+                        "&display=popup&response_type=token&v=5.81".format(app_id=self.__app_id))
             webbrowser.open_new_tab(auth_url)
             redirected_url = input("Paste here url you were redirected:\n")
             aup = parse_qs(redirected_url)
@@ -236,7 +236,7 @@ class Autopost:
     def get_posts(self, filter = "all", offset=0):
         owner_id = str(-int(self.__group_id))
         domain = "public" + self.__group_id
-        v = 5.58
+        v = 5.81
         if offset == (-1): # Offset should be positive
             offset = 0
         return self.__api.wall.get(owner_id=owner_id, domain=domain, filter=filter, extended=1, offset=offset, v=v)

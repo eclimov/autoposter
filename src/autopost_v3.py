@@ -43,7 +43,7 @@ class Autopost:
 
         self.refresh_image_queue()
 
-        self.__v_api = "5.57"
+        self.__v_api = "5.81"
         self.__access_token, _ = self.get_auth_params()
         self.__api = self.get_api(self.__access_token)
         #self.__watermarker = watermarker.Watermarker('assets/watermark_'+self.project.get_name()+'.png', self.project.get_name() + '/notWatermarkedArchive/')
@@ -987,12 +987,8 @@ class Autopost:
                                     vk_attachments.append(url)
                                 if 'photo' in attachment:  # filing local database with new artworks
                                     # getting the biggest resolution available
-                                    biggest_res = 0
-                                    for key in attachment['photo']:
-                                        key_split = str(key).split('_')
-                                        if key_split[0] == 'photo' and int(key_split[1]) > biggest_res:
-                                            image_url = attachment['photo'][key]
-                                            biggest_res = int(key_split[1])
+                                    biggest_res_photo = sorted(attachment['photo']['sizes'], key=lambda k: k['width'], reverse=True)[0]
+                                    image_url = biggest_res_photo['url']
                                     attachment_images.append(image_url)
                                     image_name = self.generate_image_name(size=4) + '.jpg'
                                     image_path = self.project.get_img_path_working() + '/' + image_name
@@ -1011,6 +1007,15 @@ class Autopost:
                                     activity_log_args['artwork_id'].append(str(cursor.lastrowid))
 
                                     # <type><owner_id>_<media_id>,<type><owner_id>_<media_id>
+                                    attachment_type = str(attachment['type'])
+                                    owner_id = str(attachment[attachment_type]['owner_id'])
+                                    media_id = str(attachment[attachment_type]['id'])
+                                    vk_attachments.append(
+                                        attachment_type + owner_id + '_' + media_id
+                                    )
+                                # GIFs
+                                if attachment['type'] == 'doc' and attachment['doc']['ext'] == 'gif':
+                                    print(attachment)
                                     attachment_type = str(attachment['type'])
                                     owner_id = str(attachment[attachment_type]['owner_id'])
                                     media_id = str(attachment[attachment_type]['id'])
@@ -1147,7 +1152,7 @@ class Autopost:
 
     def vk_post(self, args):
         self.wait()
-        args['v'] = '5.60'
+        args['v'] = '5.81'
         return (self.__api.wall.post(**args))['post_id']  # post_id
 
     def telegram_post(self, text='', image_path='', image_urls=None, url=''):

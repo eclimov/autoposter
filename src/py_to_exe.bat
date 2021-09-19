@@ -1,2 +1,2 @@
-"E:\Program Files\Python\Python36-32\Scripts\pyinstaller" -w -F -i "assets\icon.ico" --specpath="./build" --distpath=. Autoposter.py
+"F:\Python\Python37\Scripts\pyinstaller" -w -F -i "C:\Users\klimo\PycharmProjects\autoposter\src\assets\icon.ico" --specpath="./build" --distpath=. Autoposter.py
 if not errorlevel 1 rmdir /S /Q "./build"
